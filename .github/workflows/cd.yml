@@ -1,0 +1,236 @@
+name: CD (Publish to npm)
+
+on:
+  workflow_dispatch:
+    inputs:
+      bump:
+        description: "Version bump type"
+        required: true
+        type: choice
+        default: patch
+        options:
+          - patch
+          - minor
+          - major
+          - none
+      preid:
+        description: "Pre-release id (e.g. beta, rc). Leave blank for stable"
+        required: false
+        type: string
+
+permissions:
+  contents: write
+  id-token: write # for npm provenance (requires Node 18+ and npm >=9)
+  attestations: write
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    environment: production
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Use Node.js 22
+        uses: actions/setup-node@v4
+        with:
+          node-version-file: '.nvmrc'
+          cache: 'npm'
+
+      - name: Bump version & decide publish flags
+        id: pkg
+        env:
+          NPM_TOKEN: ${{ secrets.NPM_TOKEN }}
+          BUMP: ${{ inputs.bump }}
+          PREID: ${{ inputs.preid }}
+        run: |
+          set -euo pipefail
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+
+          # Decide bump command
+          BUMP_CMD=""
+          case "${BUMP:-patch}" in
+            major|minor|patch)
+              if [ -n "${PREID:-}" ]; then
+                # Convert to pre* if preid provided
+                case "${BUMP}" in
+                  major) BUMP_CMD="npm version premajor --preid ${PREID} -m 'chore: release v%s [skip ci]'" ;;
+                  minor) BUMP_CMD="npm version preminor --preid ${PREID} -m 'chore: release v%s [skip ci]'" ;;
+                  patch) BUMP_CMD="npm version prepatch --preid ${PREID} -m 'chore: release v%s [skip ci]'" ;;
+                esac
+              else
+                BUMP_CMD="npm version ${BUMP} -m 'chore: release v%s [skip ci]'"
+              fi
+              ;;
+            none)
+              # No version bump; use existing version
+              BUMP_CMD="echo"
+              ;;
+            *)
+              echo "Unknown bump type: ${BUMP}" >&2
+              exit 1
+              ;;
+          esac
+
+          if [ "${BUMP}" = "none" ]; then
+            CURRENT_VER=$(node -p "require('./package.json').version")
+            NEW_VER="v${CURRENT_VER}"
+          else
+            # shellcheck disable=SC2086
+            NEW_VER=$(sh -lc "$BUMP_CMD")
+          fi
+
+          echo "New version: $NEW_VER"
+          git push --follow-tags
+          
+          # Expose tag (vX.Y.Z) and version (X.Y.Z) for later steps
+          VER_NO_V=${NEW_VER#v}
+          echo "tag=$NEW_VER" >> "$GITHUB_OUTPUT"
+          echo "version=$VER_NO_V" >> "$GITHUB_OUTPUT"
+
+          NAME=$(node -p "require('./package.json').name")
+          echo "name=$NAME" >> "$GITHUB_OUTPUT"
+          if npm view "$NAME" version >/dev/null 2>&1; then
+            echo "flags=" >> "$GITHUB_OUTPUT"
+          else
+            echo "flags=--access public" >> "$GITHUB_OUTPUT"
+          fi
+          
+      - name: Install deps (CI)
+        run: npm ci
+
+      - name: Test (coverage)
+        run: npm run test -- --coverage
+        
+      - name: Upload coverage to Codecov
+        uses: codecov/codecov-action@v4
+        with:
+         token: ${{ secrets.CODECOV_TOKEN }}
+         files: ./coverage/lcov.info
+         flags: unittests
+         fail_ci_if_error: true
+
+      - name: Build
+        run: npm run build --if-present
+
+      - name: Generate SBOM (CycloneDX)
+        run: npm sbom --sbom-format=cyclonedx --sbom-type=library --omit dev > sbom.cdx.json
+
+      - name: Attest SBOM (GitHub Artifact Attestations)
+        uses: actions/attest-build-provenance@v3
+        with:
+          subject-path: sbom.cdx.json
+
+      - name: Update CHANGELOG.md (move Unreleased to new version)
+        env:
+          VERSION: ${{ steps.pkg.outputs.version }}
+          TAG: ${{ steps.pkg.outputs.tag }}
+          GITHUB_REPOSITORY: ${{ github.repository }}
+          verbose: true
+        run: |
+          set -euo pipefail
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+
+          FILE="CHANGELOG.md"
+          if [ ! -f "$FILE" ]; then
+            echo "No CHANGELOG.md found; skipping changelog update."
+            exit 0
+          fi
+
+          DATE=$(date -u +%Y-%m-%d)
+          VERSION_LINE="## [${VERSION}] - ${DATE}"
+
+          # Identify Unreleased block boundaries
+          UNREL_START=$(grep -n '^## \[Unreleased\]' "$FILE" | cut -d: -f1 || true)
+          if [ -z "$UNREL_START" ]; then
+            echo "No '## [Unreleased]' section found; skipping changelog update."
+            exit 0
+          fi
+          NEXT_HDR=$(awk 'NR>'"$UNREL_START"' && /^## \[/{print NR; exit}' "$FILE")
+          if [ -z "$NEXT_HDR" ]; then
+            NEXT_HDR=$(wc -l < "$FILE")
+            NEXT_HDR=$((NEXT_HDR+1))
+          fi
+
+          # Extract sections
+          HEADER=$(sed -n "1,${UNREL_START}p" "$FILE")
+          UNREL_CONTENT=$(sed -n "$((UNREL_START+1)),$((NEXT_HDR-1))p" "$FILE")
+          TAIL=$(sed -n "${NEXT_HDR},\$p" "$FILE")
+
+          # Prepare new Unreleased template (Keep a Changelog style) without tabs/indent issues
+          NEW_UNRELEASED=$(printf '%s\n' \
+            '' \
+            '- **Added**' \
+            '  - (placeholder)' \
+            '' \
+            '- **Changed**' \
+            '  - (placeholder)' \
+            '' \
+            '- **Fixed**' \
+            '  - (placeholder)' \
+            '' \
+            '- **Security**' \
+            '  - (placeholder)')
+
+          # Build the new CHANGELOG content
+          TMP_FILE=$(mktemp)
+          {
+            printf "%s\n" "$HEADER"
+            printf "%s\n\n" "$NEW_UNRELEASED"
+            printf "%s\n" "$VERSION_LINE"
+            # If Unreleased was empty, at least add a placeholder so the section isn't blank
+            if [ -z "$(echo "$UNREL_CONTENT" | tr -d '\n' | tr -d '[:space:]')" ]; then
+              printf "### Changed\n- (no notable changes)\n\n"
+            else
+              printf "%s\n" "$UNREL_CONTENT"
+              # Ensure a trailing newline after the inserted section
+              printf "\n"
+            fi
+            printf "%s\n" "$TAIL"
+          } > "$TMP_FILE"
+
+          mv "$TMP_FILE" "$FILE"
+
+          # Update bottom compare links
+          # Update [Unreleased] compare to start at v${VERSION}
+          COMPARE_URL="https://github.com/${GITHUB_REPOSITORY}/compare/v${VERSION}...HEAD"
+          awk -v repl="[Unreleased]: ${COMPARE_URL}" 'BEGIN{OFS=FS} { if ($0 ~ /^\[Unreleased\]: /) { print repl } else { print } }' "$FILE" > "$FILE.tmp"
+          mv "$FILE.tmp" "$FILE"
+
+          # Append a link for the new version if not present
+          if ! grep -q "^\[${VERSION}\]:" "$FILE"; then
+            echo "[${VERSION}]: https://github.com/${GITHUB_REPOSITORY}/releases/tag/v${VERSION}" >> "$FILE"
+          fi
+
+          git add "$FILE"
+          git commit -m "docs(changelog): release v${VERSION}"
+          git push
+
+      - name: Create GitHub Release from tag (first-party)
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          set -euo pipefail
+          TAG="${{ steps.pkg.outputs.tag }}"
+          if gh release view "$TAG" >/dev/null 2>&1; then
+            echo "Release $TAG already exists; uploading SBOM asset."
+          else
+            gh release create "$TAG" \
+              --title "Release $TAG" \
+              --generate-notes \
+              --latest
+          fi
+          # Upload/overwrite the SBOM asset on the release
+          if [ -f sbom.cdx.json ]; then
+            gh release upload "$TAG" sbom.cdx.json --clobber
+          else
+            echo "No SBOM generated; skipping upload."
+          fi
+
+      - name: Publish
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+        run: |
+          npm publish ${{ steps.pkg.outputs.flags }} --provenance

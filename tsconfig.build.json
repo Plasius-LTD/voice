@@ -1,0 +1,20 @@
+{
+  "compilerOptions": {
+    "target": "esnext",
+    "module": "NodeNext",
+    "lib": ["ESNext", "DOM"],
+    "moduleResolution": "NodeNext",
+    "jsx": "react-jsx",
+    "types": ["node", "vitest"],
+    "declaration": true,
+    "sourceMap": true,
+    "strict": true,
+    "noUncheckedIndexedAccess": true,
+    "noImplicitOverride": true,
+    "noFallthroughCasesInSwitch": true,
+    "resolveJsonModule": true,
+    "outDir": "dist",
+    "forceConsistentCasingInFileNames": true
+  },
+  "include": ["src"]
+}

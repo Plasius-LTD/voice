@@ -12,7 +12,7 @@
 
 ## Overview
 
-`@plasius/voice` provides a scoped state management solution for React applications. It allows developers to create isolated, testable, and composable stores without introducing heavy dependencies.
+`@plasius/voice` is a React hook and provider for adding speech recognition and voice controls to your applications. It wraps the Web Speech API with a stateful interface, controls (mute, volume, push-to-talk), and an intent registration system for mapping spoken commands to actions.
 
 ---
 
@@ -26,33 +26,51 @@ npm install @plasius/voice
 
 ## Usage Example
 
-### Analytics
-
 ```ts
-import { withInteractionTracking, trackPerf, initPerformanceTracking } from "@plasius/voice";
+import { VoiceProvider, useVoice, useVoiceControls } from "@plasius/voice";
 
-// Example: wrap a component with interaction tracking
-const TrackedButton = withInteractionTracking("Button", (props) => {
-  return <button {...props}>Click me</button>;
-});
+function VoiceControls() {
+  const { muted, volume, toggleMute, setVolume, listening, pushToTalk } = useVoiceControls();
 
-// Example: initialize performance tracking
+  return (
+    <div>
+      <button onClick={toggleMute}>{muted ? "Unmute" : "Mute"}</button>
+      <input
+        type="range"
+        min="0"
+        max="1"
+        step="0.1"
+        value={volume}
+        onChange={(e) => setVolume(parseFloat(e.target.value))}
+      />
+      <button {...pushToTalk}>Push to Talk</button>
+      <div>Listening: {listening ? "Yes" : "No"}</div>
+    </div>
+  );
+}
 
-const teardown = initPerformanceTracking({
-  track: trackPerf,                    // re-use our analytics pipeline
-  resourceSampleRate: 0.25,            // optional (default 0.25)
-  resourceFilter: (r) => r.initiatorType !== "img", // optional
-  includeNetworkInfo: true,            // optional (default true)
-  includeMemorySnapshot: false,        // optional (default false)
-});
+function VoiceTranscript() {
+  const { listening, transcript, partial, error } = useVoice({ origin: "Transcript" });
 
-// Example: manual event
-trackPerf({
-  category: "custom",
-  name: "user-action",
-  ts: Date.now(),
-  details: { action: "something-happened" },
-});
+  return (
+    <div>
+      <div>Listening: {listening ? "Yes" : "No"}</div>
+      <div>Transcript: {transcript}</div>
+      <div>Partial: {partial}</div>
+      {error && <div style={{ color: "red" }}>Error: {error}</div>}
+    </div>
+  );
+}
+
+export default function App() {
+  return (
+    <VoiceProvider opts={{ origin: "App", lang: "en-GB", interim: true }}>
+      <h1>My Voice-Enabled App</h1>
+      <VoiceControls />
+      <VoiceTranscript />
+    </VoiceProvider>
+  );
+}
 ```
 
 ---

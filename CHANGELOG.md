@@ -9,20 +9,6 @@ The format is based on **[Keep a Changelog](https://keepachangelog.com/en/1.1.0/
 ## [Unreleased]
 
 - **Added**
-  - Improved code coverage
-
-- **Changed**
-  - (placeholder)
-
-- **Fixed**
-  - (placeholder)
-
-- **Security**
-  - (placeholder)
-
-## [1.0.0] - 2025-09-22
-
-- **Added**
 
   - Initial Commit
   - CD pipeline added major, minor and patch flags for the pipeline

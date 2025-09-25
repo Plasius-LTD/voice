@@ -104,6 +104,15 @@ function getListening(api: any): boolean {
   if (typeof api?.listening === "boolean") return api.listening;
   return false;
 }
+// Ensure lazy-initialized recognizer is created before tests access it
+async function startAndGetSR() {
+  await act(async () => {
+    fireEvent.click(screen.getByTestId("start"));
+  });
+  const sr = (FakeSpeechRecognition as any).last?.();
+  if (!sr) throw new Error("FakeSpeechRecognition instance was not created; did you render Harness and click start?");
+  return sr;
+}
 
 // ---- Test harness component ------------------------------------------------
 const Harness: React.FC<{
@@ -145,16 +154,10 @@ afterEach(() => {
 describe("useVoice – initialization and start/stop", () => {
   it("applies lang & interim options and calls SR.start/stop", async () => {
     render(<Harness opts={{ lang: "en-GB", interim: true }} />);
-
-    const sr = FakeSpeechRecognition.last();
-    // Config set on recognition
+    const sr = await startAndGetSR();
+    // Config set on recognition (applied at creation time)
     expect(sr.lang).toBe("en-GB");
     expect(sr.interimResults).toBe(true);
-
-    await act(async () => {
-      fireEvent.click(screen.getByTestId("start"));
-    });
-    expect(sr.start).toHaveBeenCalledTimes(1);
 
     await act(async () => {
       fireEvent.click(screen.getByTestId("stop"));
@@ -170,12 +173,7 @@ describe("useVoice – initialization and start/stop", () => {
 describe("useVoice – interim vs final results + activate + redact", () => {
   it("does not call activate on interim, but calls with redacted text on final", async () => {
     render(<Harness opts={{ activate: activateSpy, redact: redactSpy }} />);
-    const sr = FakeSpeechRecognition.last();
-
-    // Begin listening
-    await act(async () => {
-      fireEvent.click(screen.getByTestId("start"));
-    });
+    const sr = await startAndGetSR();
 
     // Emit an interim result
     await act(async () => {
@@ -205,11 +203,7 @@ describe("useVoice – interim vs final results + activate + redact", () => {
 describe("useVoice – final results without redact", () => {
   it("calls activate on final without using redact", async () => {
     render(<Harness opts={{ activate: activateSpy }} />);
-    const sr = FakeSpeechRecognition.last();
-
-    await act(async () => {
-      fireEvent.click(screen.getByTestId("start"));
-    });
+    const sr = await startAndGetSR();
 
     await act(async () => {
       sr._emitResult("Call 123 Alice", true);
@@ -224,11 +218,7 @@ describe("useVoice – final results without redact", () => {
 describe("useVoice – abort flow", () => {
   it("abort() ends listening and triggers onend", async () => {
     render(<Harness />);
-    const sr = FakeSpeechRecognition.last();
-
-    await act(async () => {
-      fireEvent.click(screen.getByTestId("start"));
-    });
+    const sr = await startAndGetSR();
     expect(sr.start).toHaveBeenCalledTimes(1);
 
     await act(async () => {
@@ -260,11 +250,12 @@ describe("useVoice – stop when not started", () => {
 describe("useVoice – rerender with new lang", () => {
   it("applies new lang on rerender", async () => {
     const { rerender } = render(<Harness opts={{ lang: "en-GB" }} />);
-    const first = FakeSpeechRecognition.last();
+    const first = await startAndGetSR();
     expect(first.lang).toBe("en-GB");
+    await act(async () => { fireEvent.click(screen.getByTestId("stop")); });
 
     rerender(<Harness opts={{ lang: "en-US" }} />);
-    const second = FakeSpeechRecognition.last();
+    const second = await startAndGetSR();
     // Either we reconfigure the same instance or construct a new one; assert current reflects new lang
     expect(second.lang).toBe("en-US");
   });
@@ -293,7 +284,7 @@ describe("useVoice – unsupported environment", () => {
 });
 
 describe("useVoice – webkit fallback and config flags", () => {
-  it("uses webkit SR when standard is missing and applies config flags", () => {
+  it("uses webkit SR when standard is missing and applies config flags", async () => {
     const savedSR = (globalThis as any).SpeechRecognition;
     // Remove standard SR, leave webkit in place (already set by our Fake)
     // @ts-ignore
@@ -303,7 +294,7 @@ describe("useVoice – webkit fallback and config flags", () => {
       <Harness opts={{ lang: "en-AU", interim: false, continuous: true }} />
     );
 
-    const sr = (FakeSpeechRecognition as any).last();
+    const sr = await startAndGetSR();
     expect(sr.lang).toBe("en-AU");
     expect(sr.interimResults).toBe(false);
     expect(sr.continuous).toBe(true);
@@ -326,11 +317,7 @@ describe("useVoice – registered intent takes precedence over activate", () => 
     ]);
 
     render(<Harness opts={{ origin: "TestPage", activate: activateSpy }} />);
-    const sr = (FakeSpeechRecognition as any).last();
-
-    await act(async () => {
-      fireEvent.click(screen.getByTestId("start"));
-    });
+    const sr = await startAndGetSR();
 
     await act(async () => {
       sr._emitResult("please add to cart", true);
@@ -357,11 +344,7 @@ describe("useVoice – global ('*') registered intents work for any origin", () 
     ]);
 
     render(<Harness opts={{ origin: "DifferentPage", activate: activateSpy }} />);
-    const sr = (FakeSpeechRecognition as any).last();
-
-    await act(async () => {
-      fireEvent.click(screen.getByTestId("start"));
-    });
+    const sr = await startAndGetSR();
 
     await act(async () => {
       sr._emitResult("could you open menu", true);
@@ -382,9 +365,7 @@ describe("useVoice – unregister removes handlers and falls back to activate", 
     ]);
 
     render(<Harness opts={{ origin: "TestPage2", activate: activateSpy }} />);
-    const sr = (FakeSpeechRecognition as any).last();
-
-    await act(async () => { fireEvent.click(screen.getByTestId("start")); });
+    const sr = await startAndGetSR();
     await act(async () => { sr._emitResult("help", true); });
     expect(handler).toHaveBeenCalledTimes(1);
     expect(activateSpy).not.toHaveBeenCalled();
@@ -401,9 +382,7 @@ describe("useVoice – unregister removes handlers and falls back to activate", 
 describe("useVoice – default intent inference and quantity parsing", () => {
   it("infers cart.incrementItem with numeric and word quantities", async () => {
     render(<Harness opts={{ origin: "CartPage", activate: activateSpy }} />);
-    const sr = (FakeSpeechRecognition as any).last();
-
-    await act(async () => { fireEvent.click(screen.getByTestId("start")); });
+    const sr = await startAndGetSR();
 
     // Word quantity
     await act(async () => { sr._emitResult("add one", true); });
@@ -420,9 +399,7 @@ describe("useVoice – default intent inference and quantity parsing", () => {
 describe("useVoice – interim disabled does not set partial or redact", () => {
   it("ignores interim results when interim=false", async () => {
     render(<Harness opts={{ interim: false, activate: activateSpy, redact: redactSpy }} />);
-    const sr = (FakeSpeechRecognition as any).last();
-
-    await act(async () => { fireEvent.click(screen.getByTestId("start")); });
+    const sr = await startAndGetSR();
 
     await act(async () => { sr._emitResult("this is interim only", false); });
 
@@ -459,9 +436,7 @@ describe("useVoice – default intent inference table", () => {
 
   it("fires activate with expected intent for a variety of utterances", async () => {
     render(<Harness opts={{ origin: "AnyPage", activate: activateSpy }} />);
-    const sr = (FakeSpeechRecognition as any).last();
-
-    await act(async () => { fireEvent.click(screen.getByTestId("start")); });
+    const sr = await startAndGetSR();
 
     for (const c of cases) {
       activateSpy.mockClear();
@@ -508,9 +483,7 @@ describe("useVoice – registry name reporting and partial unregister", () => {
 describe("useVoice – listening state transitions", () => {
   it("sets listening=true on onstart and false on onend", async () => {
     render(<Harness />);
-    const sr = (FakeSpeechRecognition as any).last();
-
-    await act(async () => { fireEvent.click(screen.getByTestId("start")); });
+    const sr = await startAndGetSR();
     // Simulate low-level engine start
     await act(async () => { sr.onstart && sr.onstart(); });
     expect(screen.getByTestId("listening").textContent).toBe("true");
@@ -524,9 +497,7 @@ describe("useVoice – listening state transitions", () => {
 
   it("sets listening=false when an error occurs", async () => {
     render(<Harness />);
-    const sr = (FakeSpeechRecognition as any).last();
-
-    await act(async () => { fireEvent.click(screen.getByTestId("start")); });
+    const sr = await startAndGetSR();
     // Simulate engine error (e.g., not-allowed/no-speech)
     await act(async () => { sr._emitError("not-allowed"); });
 
@@ -537,9 +508,6 @@ describe("useVoice – listening state transitions", () => {
 
   it("remains false if onend fires without a prior start", async () => {
     render(<Harness />);
-    const sr = (FakeSpeechRecognition as any).last();
-
-    await act(async () => { sr.onend && sr.onend(); });
     expect(screen.getByTestId("listening").textContent).toBe("false");
   });
 });

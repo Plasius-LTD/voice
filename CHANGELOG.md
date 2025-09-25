@@ -9,6 +9,20 @@ The format is based on **[Keep a Changelog](https://keepachangelog.com/en/1.1.0/
 ## [Unreleased]
 
 - **Added**
+  - (placeholder)
+
+- **Changed**
+  - (placeholder)
+
+- **Fixed**
+  - (placeholder)
+
+- **Security**
+  - (placeholder)
+
+## [1.0.4] - 2025-09-25
+
+- **Added**
   - VoiceIntents auto-register/unregister mechanism added
 
 - **Changed**
@@ -52,7 +66,8 @@ The format is based on **[Keep a Changelog](https://keepachangelog.com/en/1.1.0/
 
 ---
 
-[Unreleased]: https://github.com/Plasius-LTD/voice/compare/v1.0.0...HEAD
+[Unreleased]: https://github.com/Plasius-LTD/voice/compare/v1.0.4...HEAD
 
 
 [1.0.0]: https://github.com/Plasius-LTD/voice/releases/tag/v1.0.0
+[1.0.4]: https://github.com/Plasius-LTD/voice/releases/tag/v1.0.4

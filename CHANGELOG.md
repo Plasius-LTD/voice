@@ -15,6 +15,20 @@ The format is based on **[Keep a Changelog](https://keepachangelog.com/en/1.1.0/
   - (placeholder)
 
 - **Fixed**
+  - (placeholder)
+
+- **Security**
+  - (placeholder)
+
+## [1.0.7] - 2025-09-25
+
+- **Added**
+  - (placeholder)
+
+- **Changed**
+  - (placeholder)
+
+- **Fixed**
   - Added fallback handling in `useVoice` to ensure `listening` state updates correctly by dispatching `VOICE/START` on `SpeechRecognition.onstart`. This resolves the issue where `listening` never flipped to `true` despite microphone permissions being granted.
 
 - **Security**
@@ -94,10 +108,11 @@ The format is based on **[Keep a Changelog](https://keepachangelog.com/en/1.1.0/
 
 ---
 
-[Unreleased]: https://github.com/Plasius-LTD/voice/compare/v1.0.6...HEAD
+[Unreleased]: https://github.com/Plasius-LTD/voice/compare/v1.0.7...HEAD
 
 
 [1.0.0]: https://github.com/Plasius-LTD/voice/releases/tag/v1.0.0
 [1.0.4]: https://github.com/Plasius-LTD/voice/releases/tag/v1.0.4
 [1.0.5]: https://github.com/Plasius-LTD/voice/releases/tag/v1.0.5
 [1.0.6]: https://github.com/Plasius-LTD/voice/releases/tag/v1.0.6
+[1.0.7]: https://github.com/Plasius-LTD/voice/releases/tag/v1.0.7

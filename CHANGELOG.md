@@ -15,7 +15,7 @@ The format is based on **[Keep a Changelog](https://keepachangelog.com/en/1.1.0/
   - (placeholder)
 
 - **Fixed**
-  - (placeholder)
+  - add startup watchdog with recognizer recreate to ensure listening flag is set when onstart fails to fire
 
 - **Security**
   - (placeholder)

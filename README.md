@@ -73,6 +73,51 @@ export default function App() {
 }
 ```
 
+### Registering Intents
+
+You can register voice intents that map certain phrases or regex patterns to custom handlers. These handlers run instead of the generic `activate` callback when the intent matches.
+
+```ts
+import { registerVoiceIntents, unregisterVoiceIntents } from "@plasius/voice";
+
+// Register intents for a page or origin
+registerVoiceIntents("CartPage", [
+  {
+    name: "cart.addItem",
+    patterns: [/add to (cart|basket|bag)/i],
+    handler: async (utterance) => {
+      console.log("Adding item:", utterance);
+      return { status: "success" };
+    },
+  },
+]);
+
+// Later, you can unregister them by origin or by specific names
+unregisterVoiceIntents("CartPage", ["cart.addItem"]);
+```
+
+This lets you scope voice commands by page (or use `"*"` as the origin for global commands).
+
+### Auto-registering intents with a component
+
+```tsx
+import { VoiceIntents } from "@plasius/voice";
+
+// Registers while mounted; unregisters on unmount
+<VoiceIntents
+  origin="CartPage"
+  intents={[{
+    name: "cart.addItem",
+    patterns: [/add to (cart|basket|bag)/i],
+    handler: async () => ({ status: "success" }),
+  }]}
+/>
+
+// Or with a hook
+import { useAutoVoiceIntents } from "@plasius/voice";
+useAutoVoiceIntents("CartPage", [{ name: "open.menu", patterns: ["open menu"], handler: async () => ({ status: "success" }) }]);
+```
+
 ---
 
 ## Contributing

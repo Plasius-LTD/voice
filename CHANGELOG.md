@@ -15,7 +15,7 @@ The format is based on **[Keep a Changelog](https://keepachangelog.com/en/1.1.0/
   - (placeholder)
 
 - **Fixed**
-  - (placeholder)
+  - Added fallback handling in `useVoice` to ensure `listening` state updates correctly by dispatching `VOICE/START` on `SpeechRecognition.onstart`. This resolves the issue where `listening` never flipped to `true` despite microphone permissions being granted.
 
 - **Security**
   - (placeholder)

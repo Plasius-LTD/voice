@@ -493,13 +493,12 @@ export function useVoice(
   }
 
   useEffect(() => {
-    const rec = createRecognizer();
+    // Invalidate any existing recognizer so the next start() call will
+    // (re)create it inside the user gesture with the latest options.
+    const rec = recRef.current;
     if (!rec) return;
-    recRef.current = rec;
-    return () => {
-      try { rec.stop(); } catch {}
-      if (recRef.current === rec) recRef.current = null;
-    };
+    try { rec.stop(); } catch {}
+    if (recRef.current === rec) recRef.current = null;
   }, [origin, lang, interim, continuous]);
 
   const start = () => {

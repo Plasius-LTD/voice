@@ -1,6 +1,6 @@
 // File: voice/src/components/voiceIntents.tsx
 import React, { useEffect, useRef } from "react";
-import type { IntentHandler } from "./useVoice";
+import type { IntentHandler } from "./useVoice.js";
 import { registerVoiceIntents, unregisterVoiceIntents } from "./useVoice.js";
 
 export type IntentSpec = {

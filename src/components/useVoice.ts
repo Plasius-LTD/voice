@@ -337,16 +337,51 @@ export function useVoice(
     redact,
     activate,
   } = opts;
-  const [state, setState] = useState<VoiceState>({
-    listening: false,
-    transcript: "",
-    partial: "",
-    sessionId: crypto.randomUUID(),
-  });
+  // Feature check for SpeechRecognition support
+  const hasSR = typeof window !== "undefined" && !!((window as any).SpeechRecognition || (window as any).webkitSpeechRecognition);
 
-  const recRef = useRef<SpeechRecognition | null>(null);
+  // Generate a sessionId on mount; store in ref
+  const sessionIdRef = useRef<string>(crypto.randomUUID());
+  // Keep startedAt ref for latency calculations
   const startedAt = useRef<number>(0);
+  const recRef = useRef<SpeechRecognition | null>(null);
   const dispatch = store?.dispatch;
+
+  // Select current session state from store using subscribeWithSelector
+  const selectVoiceState = (state: VoiceSliceState): VoiceState => {
+    const sid = state.currentSessionId;
+    if (!sid || !state.bySession[sid]) {
+      return {
+        listening: false,
+        transcript: "",
+        partial: "",
+        error: undefined,
+        sessionId: sessionIdRef.current,
+      };
+    }
+    const s = state.bySession[sid];
+    return {
+      listening: s.status === "listening",
+      transcript: s.transcript,
+      partial: s.partial,
+      error: s.error,
+      sessionId: s.id,
+    };
+  };
+
+  const [voiceState, setVoiceState] = useState<VoiceState>(() =>
+    selectVoiceState(store.getState())
+  );
+
+  useEffect(() => {
+    // Only re-render when the selected slice changes
+    const unsubscribe = store.subscribeWithSelector(
+      selectVoiceState,
+      setVoiceState
+    );
+    return unsubscribe;
+  }, []);
+
   useEffect(() => {
     const SR =
       (window as any).SpeechRecognition ||
@@ -360,19 +395,9 @@ export function useVoice(
 
     rec.onstart = () => {
       startedAt.current = performance.now();
-      let newSessionId = "";
-      setState((s) => {
-        newSessionId = crypto.randomUUID();
-        return {
-          ...s,
-          listening: true,
-          partial: "",
-          transcript: "",
-          error: undefined,
-          sessionId: newSessionId,
-        };
-      });
-      store?.dispatch(
+      const newSessionId = crypto.randomUUID();
+      sessionIdRef.current = newSessionId;
+      dispatch(
         voiceActions.start({
           type: "VOICE/START",
           payload: {
@@ -400,29 +425,27 @@ export function useVoice(
       }
       if (interim && interimText) {
         const text = redact ? redact(interimText) : interimText;
-        setState((s) => ({ ...s, partial: text }));
         dispatch(
           voiceActions.partial({
             type: "VOICE/PARTIAL",
-            payload: { sessionId: state.sessionId, partial: text },
+            payload: { sessionId: sessionIdRef.current, partial: text },
           })
         );
         track("ui.voice", {
           phase: "partial",
           origin,
-          sessionId: state.sessionId,
+          sessionId: sessionIdRef.current,
           transcript: text,
         });
       }
       if (finalText) {
         const text = redact ? redact(finalText) : finalText;
         const latencyMs = Math.round(performance.now() - startedAt.current);
-        setState((s) => ({ ...s, transcript: text, partial: "" }));
         dispatch(
           voiceActions.final({
             type: "VOICE/FINAL",
             payload: {
-              sessionId: state.sessionId,
+              sessionId: sessionIdRef.current,
               transcript: text,
               latencyMs,
             },
@@ -431,7 +454,7 @@ export function useVoice(
         track("ui.voice", {
           phase: "final",
           origin,
-          sessionId: state.sessionId,
+          sessionId: sessionIdRef.current,
           transcript: text,
           latencyMs,
         });
@@ -441,7 +464,7 @@ export function useVoice(
           voiceActions.intent({
             type: "VOICE/INTENT",
             payload: {
-              sessionId: state.sessionId,
+              sessionId: sessionIdRef.current,
               intent: inferred.name,
               params: inferred.params,
             },
@@ -450,7 +473,7 @@ export function useVoice(
         track("ui.voice", {
           phase: "intent",
           origin,
-          sessionId: state.sessionId,
+          sessionId: sessionIdRef.current,
           intent: inferred.name,
           params: inferred.params,
         });
@@ -464,7 +487,7 @@ export function useVoice(
             const match = list.find(i => i.name === inferred.name)?.handler;
             if (match) {
               return match({
-                sessionId: state.sessionId,
+                sessionId: sessionIdRef.current,
                 origin,
                 lang,
                 params: inferred.params,
@@ -479,7 +502,7 @@ export function useVoice(
             ? maybeFromRegistry
             : typeof activate === "function"
             ? activate(inferred.name, {
-                sessionId: state.sessionId,
+                sessionId: sessionIdRef.current,
                 origin,
                 lang,
                 params: inferred.params,
@@ -493,7 +516,7 @@ export function useVoice(
               voiceActions.activate({
                 type: "VOICE/ACTIVATE",
                 payload: {
-                  sessionId: state.sessionId,
+                  sessionId: sessionIdRef.current,
                   intent: inferred.name,
                   activationResult,
                 },
@@ -502,7 +525,7 @@ export function useVoice(
             track("ui.voice", {
               phase: "activate",
               origin,
-              sessionId: state.sessionId,
+              sessionId: sessionIdRef.current,
               intent: inferred.name,
               activationResult,
               params: inferred.params,
@@ -512,13 +535,13 @@ export function useVoice(
             dispatch(
               voiceActions.error({
                 type: "VOICE/ERROR",
-                payload: { sessionId: state.sessionId, error: String(err) },
+                payload: { sessionId: sessionIdRef.current, error: String(err) },
               })
             );
             track("ui.voice", {
               phase: "error",
               origin,
-              sessionId: state.sessionId,
+              sessionId: sessionIdRef.current,
               error: String(err),
             });
           });
@@ -526,50 +549,47 @@ export function useVoice(
     };
 
     rec.onerror = (e: any) => {
-      setState((s) => ({
-        ...s,
-        error: e?.error || "unknown",
-        listening: false,
-      }));
       dispatch(
         voiceActions.error({
           type: "VOICE/ERROR",
-          payload: { sessionId: state.sessionId, error: e?.error || "unknown" },
+          payload: { sessionId: sessionIdRef.current, error: e?.error || "unknown" },
         })
       );
       track("ui.voice", {
         phase: "error",
         origin,
-        sessionId: state.sessionId,
+        sessionId: sessionIdRef.current,
         error: e?.error,
       });
     };
 
     rec.onend = () => {
       const latencyMs = Math.round(performance.now() - startedAt.current);
-      setState((s) => ({ ...s, listening: false }));
       dispatch(
         voiceActions.end({
           type: "VOICE/END",
-          payload: { sessionId: state.sessionId, latencyMs },
+          payload: { sessionId: sessionIdRef.current, latencyMs },
         })
       );
       track("ui.voice", {
         phase: "end",
         origin,
-        sessionId: state.sessionId,
+        sessionId: sessionIdRef.current,
         latencyMs,
       });
     };
 
     recRef.current = rec;
-    return () => rec.stop();
+    return () => {
+      try { rec.stop(); } catch {}
+      if (recRef.current === rec) recRef.current = null;
+    };
   }, [origin, lang, interim, continuous]);
 
-  const start = () => recRef.current?.start();
-  const stop = () => recRef.current?.stop();
+  const start = () => { if (!hasSR) return; recRef.current?.start(); };
+  const stop = () => { if (!hasSR) return; recRef.current?.stop(); };
 
-  return { ...state, start, stop, supported: !!recRef.current };
+  return { ...voiceState, start, stop, supported: hasSR };
 }
 
 function resolveRegisteredIntent(

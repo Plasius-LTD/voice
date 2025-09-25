@@ -9,13 +9,13 @@ The format is based on **[Keep a Changelog](https://keepachangelog.com/en/1.1.0/
 ## [Unreleased]
 
 - **Added**
-  - (placeholder)
+  - Additional state tests
 
 - **Changed**
   - (placeholder)
 
 - **Fixed**
-  - (placeholder)
+  - Fixed the state.listening flag not being updated correctly to external libraries. 
 
 - **Security**
   - (placeholder)

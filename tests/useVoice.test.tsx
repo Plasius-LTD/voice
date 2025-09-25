@@ -43,6 +43,7 @@ class FakeSpeechRecognition {
 
   public onresult: ((e: FakeSpeechRecognitionEvent) => void) | null = null;
   public onerror: ((e: { error: string }) => void) | null = null;
+  public onstart: (() => void) | null = null;
   public onend: (() => void) | null = null;
 
   start = vi.fn(() => {
@@ -500,5 +501,45 @@ describe("useVoice – registry name reporting and partial unregister", () => {
     // Cleanup
     unregisterVoiceIntents("OriginA");
     unregisterVoiceIntents("*");
+  });
+});
+
+
+describe("useVoice – listening state transitions", () => {
+  it("sets listening=true on onstart and false on onend", async () => {
+    render(<Harness />);
+    const sr = (FakeSpeechRecognition as any).last();
+
+    await act(async () => { fireEvent.click(screen.getByTestId("start")); });
+    // Simulate low-level engine start
+    await act(async () => { sr.onstart && sr.onstart(); });
+    expect(screen.getByTestId("listening").textContent).toBe("true");
+
+    // Stop → onend should flip listening to false
+    await act(async () => { fireEvent.click(screen.getByTestId("stop")); });
+    await waitFor(() => {
+      expect(screen.getByTestId("listening").textContent).toBe("false");
+    });
+  });
+
+  it("sets listening=false when an error occurs", async () => {
+    render(<Harness />);
+    const sr = (FakeSpeechRecognition as any).last();
+
+    await act(async () => { fireEvent.click(screen.getByTestId("start")); });
+    // Simulate engine error (e.g., not-allowed/no-speech)
+    await act(async () => { sr._emitError("not-allowed"); });
+
+    await waitFor(() => {
+      expect(screen.getByTestId("listening").textContent).toBe("false");
+    });
+  });
+
+  it("remains false if onend fires without a prior start", async () => {
+    render(<Harness />);
+    const sr = (FakeSpeechRecognition as any).last();
+
+    await act(async () => { sr.onend && sr.onend(); });
+    expect(screen.getByTestId("listening").textContent).toBe("false");
   });
 });

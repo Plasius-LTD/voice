@@ -15,6 +15,20 @@ The format is based on **[Keep a Changelog](https://keepachangelog.com/en/1.1.0/
   - (placeholder)
 
 - **Fixed**
+  - (placeholder)
+
+- **Security**
+  - (placeholder)
+
+## [1.0.6] - 2025-09-25
+
+- **Added**
+  - (placeholder)
+
+- **Changed**
+  - (placeholder)
+
+- **Fixed**
   - add startup watchdog with recognizer recreate to ensure listening flag is set when onstart fails to fire
 
 - **Security**
@@ -80,9 +94,10 @@ The format is based on **[Keep a Changelog](https://keepachangelog.com/en/1.1.0/
 
 ---
 
-[Unreleased]: https://github.com/Plasius-LTD/voice/compare/v1.0.5...HEAD
+[Unreleased]: https://github.com/Plasius-LTD/voice/compare/v1.0.6...HEAD
 
 
 [1.0.0]: https://github.com/Plasius-LTD/voice/releases/tag/v1.0.0
 [1.0.4]: https://github.com/Plasius-LTD/voice/releases/tag/v1.0.4
 [1.0.5]: https://github.com/Plasius-LTD/voice/releases/tag/v1.0.5
+[1.0.6]: https://github.com/Plasius-LTD/voice/releases/tag/v1.0.6

@@ -5,8 +5,14 @@ export {
   VoiceProvider,
   useVoiceContext,
   WithVoice,
-} from "./components/voiceProvider";
-export { useVoice } from "./components/useVoice";
-export { useVoiceControls } from "./components/useVoiceControls";
-export { VoiceIntents, useAutoVoiceIntents } from "./components/voiceIntents";
-export type { IntentSpec, VoiceIntentsProps } from "./components/voiceIntents";
+} from "./components/voiceProvider.js";
+export { useVoice } from "./components/useVoice.js";
+export { useVoiceControls } from "./components/useVoiceControls.js";
+export {
+  VoiceIntents,
+  useAutoVoiceIntents,
+} from "./components/voiceIntents.js";
+export type {
+  IntentSpec,
+  VoiceIntentsProps,
+} from "./components/voiceIntents.js";

@@ -9,6 +9,20 @@ The format is based on **[Keep a Changelog](https://keepachangelog.com/en/1.1.0/
 ## [Unreleased]
 
 - **Added**
+  - (placeholder)
+
+- **Changed**
+  - (placeholder)
+
+- **Fixed**
+  - (placeholder)
+
+- **Security**
+  - (placeholder)
+
+## [1.0.8] - 2025-09-26
+
+- **Added**
   - Additional logging for exceptions raised during SpeechRegonition start, end, error etc.
 
 - **Changed**
@@ -108,10 +122,11 @@ The format is based on **[Keep a Changelog](https://keepachangelog.com/en/1.1.0/
 
 ---
 
-[Unreleased]: https://github.com/Plasius-LTD/voice/compare/v1.0.7...HEAD
+[Unreleased]: https://github.com/Plasius-LTD/voice/compare/v1.0.8...HEAD
 
 [1.0.0]: https://github.com/Plasius-LTD/voice/releases/tag/v1.0.0
 [1.0.4]: https://github.com/Plasius-LTD/voice/releases/tag/v1.0.4
 [1.0.5]: https://github.com/Plasius-LTD/voice/releases/tag/v1.0.5
 [1.0.6]: https://github.com/Plasius-LTD/voice/releases/tag/v1.0.6
 [1.0.7]: https://github.com/Plasius-LTD/voice/releases/tag/v1.0.7
+[1.0.8]: https://github.com/Plasius-LTD/voice/releases/tag/v1.0.8

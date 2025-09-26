@@ -1,6 +1,6 @@
 {
   "name": "@plasius/voice",
-  "version": "1.0.7",
+  "version": "1.0.8",
   "description": "A Voice -> Intent mapper component library (multi-lingual compatible with @plasius/translations)",
   "homepage": "https://github.com/Plasius-LTD/voice#readme",
   "bugs": {

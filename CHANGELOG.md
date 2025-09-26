@@ -9,13 +9,13 @@ The format is based on **[Keep a Changelog](https://keepachangelog.com/en/1.1.0/
 ## [Unreleased]
 
 - **Added**
-  - (placeholder)
+  - Additional logging for exceptions raised during SpeechRegonition start, end, error etc.
 
 - **Changed**
   - (placeholder)
 
 - **Fixed**
-  - (placeholder)
+  - stabilize SpeechRecognition start by stopping previous instance before starting a new one, defaulting lang/flags, and adding a watchdog retry to prevent immediate stop/abort races.
 
 - **Security**
   - (placeholder)
@@ -109,7 +109,6 @@ The format is based on **[Keep a Changelog](https://keepachangelog.com/en/1.1.0/
 ---
 
 [Unreleased]: https://github.com/Plasius-LTD/voice/compare/v1.0.7...HEAD
-
 
 [1.0.0]: https://github.com/Plasius-LTD/voice/releases/tag/v1.0.0
 [1.0.4]: https://github.com/Plasius-LTD/voice/releases/tag/v1.0.4

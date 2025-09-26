@@ -2,7 +2,9 @@
 import { useEffect, useRef, useState } from "react";
 import { track } from "@plasius/nfr";
 import { createStore } from "@plasius/react-state";
-
+// ──────────────────────────────────────────────────────────────────────────────
+// Types
+// ──────────────────────────────────────────────────────────────────────────────
 type VoiceOpts = {
   origin?: string;
   lang?: string; // e.g. "en-GB"
@@ -400,93 +402,265 @@ export function useVoice(
       (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition;
     if (!SR) return null;
     const rec: SpeechRecognition = new SR();
-    rec.lang = lang;
-    rec.interimResults = interim;
+    // Ensure a valid BCP‑47 language is always set (fallback to browser default)
+    rec.lang = lang || (navigator.language || "en-GB");
+    rec.interimResults = !!interim;
     // Some engines ignore .continuous; we still set it
-    (rec as any).continuous = continuous;
+    (rec as any).continuous = !!continuous;
 
     rec.onstart = () => {
-      clearStartWatchdog();
-      startingRef.current = false;
-      startedAt.current = performance.now();
-      const newSessionId = crypto.randomUUID();
-      sessionIdRef.current = newSessionId;
-      dispatch(
-        voiceActions.start({
-          type: "VOICE/START",
-          payload: {
-            sessionId: newSessionId,
-            origin,
-            lang,
-            startedAt: startedAt.current,
-          },
-        })
-      );
-      track("ui.voice", { phase: "start", origin, sessionId: newSessionId, lang });
+      try {
+        clearStartWatchdog();
+        startingRef.current = false;
+        startedAt.current = performance.now();
+        const newSessionId = crypto.randomUUID();
+        sessionIdRef.current = newSessionId;
+        dispatch(
+          voiceActions.start({
+            type: "VOICE/START",
+            payload: {
+              sessionId: newSessionId,
+              origin,
+              lang,
+              startedAt: startedAt.current,
+            },
+          })
+        );
+        track("ui.voice", {
+          phase: "start",
+          origin,
+          sessionId: newSessionId,
+          lang,
+        });
+      } catch (err) {
+        dispatch(
+          voiceActions.error({
+            type: "VOICE/ERROR",
+            payload: { sessionId: sessionIdRef.current, error: String(err) },
+          })
+        );
+        track("ui.voice", {
+          phase: "error",
+          origin,
+          sessionId: sessionIdRef.current,
+          error: String(err),
+        });
+      }
     };
 
     rec.onresult = (ev) => {
-      let finalText = "";
-      let interimText = "";
-      for (const res of (ev as any).results as any) {
-        if (res.isFinal) finalText += res[0].transcript;
-        else interimText += res[0].transcript;
-      }
-      if (interim && interimText) {
-        const text = redact ? redact(interimText) : interimText;
-        dispatch(
-          voiceActions.partial({ type: "VOICE/PARTIAL", payload: { sessionId: sessionIdRef.current, partial: text } })
-        );
-        track("ui.voice", { phase: "partial", origin, sessionId: sessionIdRef.current, transcript: text });
-      }
-      if (finalText) {
-        const text = redact ? redact(finalText) : finalText;
-        const latencyMs = Math.round(performance.now() - startedAt.current);
-        dispatch(
-          voiceActions.final({ type: "VOICE/FINAL", payload: { sessionId: sessionIdRef.current, transcript: text, latencyMs } })
-        );
-        track("ui.voice", { phase: "final", origin, sessionId: sessionIdRef.current, transcript: text, latencyMs });
-        const inferred = inferIntent(text, origin);
-        dispatch(
-          voiceActions.intent({ type: "VOICE/INTENT", payload: { sessionId: sessionIdRef.current, intent: inferred.name, params: inferred.params } })
-        );
-        track("ui.voice", { phase: "intent", origin, sessionId: sessionIdRef.current, intent: inferred.name, params: inferred.params });
-        const runRegistered = () => {
-          const lists = [origin ? intentRegistry.get(origin) : undefined, intentRegistry.get("*")].filter(Boolean) as RegisteredIntent[][];
-          for (const list of lists) {
-            const match = list.find((i) => i.name === inferred.name)?.handler;
-            if (match) return match({ sessionId: sessionIdRef.current, origin, lang, params: inferred.params });
-          }
-          return undefined;
-        };
-        const maybeFromRegistry = runRegistered();
-        const maybe = maybeFromRegistry !== undefined ? maybeFromRegistry : typeof activate === "function" ? activate(inferred.name, { sessionId: sessionIdRef.current, origin, lang, params: inferred.params }) : undefined;
-        Promise.resolve(maybe)
-          .then((res) => {
-            const activationResult = res === "no-match" || res === false ? "no-match" : "success";
-            dispatch(voiceActions.activate({ type: "VOICE/ACTIVATE", payload: { sessionId: sessionIdRef.current, intent: inferred.name, activationResult } }));
-            track("ui.voice", { phase: "activate", origin, sessionId: sessionIdRef.current, intent: inferred.name, activationResult, params: inferred.params });
-          })
-          .catch((err) => {
-            dispatch(voiceActions.error({ type: "VOICE/ERROR", payload: { sessionId: sessionIdRef.current, error: String(err) } }));
-            track("ui.voice", { phase: "error", origin, sessionId: sessionIdRef.current, error: String(err) });
+      try {
+        let finalText = "";
+        let interimText = "";
+        for (const res of (ev as any).results as any) {
+          if (res.isFinal) finalText += res[0].transcript;
+          else interimText += res[0].transcript;
+        }
+        if (interim && interimText) {
+          const text = redact ? redact(interimText) : interimText;
+          dispatch(
+            voiceActions.partial({
+              type: "VOICE/PARTIAL",
+              payload: { sessionId: sessionIdRef.current, partial: text },
+            })
+          );
+          track("ui.voice", {
+            phase: "partial",
+            origin,
+            sessionId: sessionIdRef.current,
+            transcript: text,
           });
+        }
+        if (finalText) {
+          const text = redact ? redact(finalText) : finalText;
+          const latencyMs = Math.round(performance.now() - startedAt.current);
+          dispatch(
+            voiceActions.final({
+              type: "VOICE/FINAL",
+              payload: {
+                sessionId: sessionIdRef.current,
+                transcript: text,
+                latencyMs,
+              },
+            })
+          );
+          track("ui.voice", {
+            phase: "final",
+            origin,
+            sessionId: sessionIdRef.current,
+            transcript: text,
+            latencyMs,
+          });
+          const inferred = inferIntent(text, origin);
+          dispatch(
+            voiceActions.intent({
+              type: "VOICE/INTENT",
+              payload: {
+                sessionId: sessionIdRef.current,
+                intent: inferred.name,
+                params: inferred.params,
+              },
+            })
+          );
+          track("ui.voice", {
+            phase: "intent",
+            origin,
+            sessionId: sessionIdRef.current,
+            intent: inferred.name,
+            params: inferred.params,
+          });
+          const runRegistered = () => {
+            const lists = [
+              origin ? intentRegistry.get(origin) : undefined,
+              intentRegistry.get("*"),
+            ].filter(Boolean) as RegisteredIntent[][];
+            for (const list of lists) {
+              const match = list.find((i) => i.name === inferred.name)?.handler;
+              if (match)
+                return match({
+                  sessionId: sessionIdRef.current,
+                  origin,
+                  lang,
+                  params: inferred.params,
+                });
+            }
+            return undefined;
+          };
+          const maybeFromRegistry = runRegistered();
+          const maybe =
+            maybeFromRegistry !== undefined
+              ? maybeFromRegistry
+              : typeof activate === "function"
+                ? activate(inferred.name, {
+                    sessionId: sessionIdRef.current,
+                    origin,
+                    lang,
+                    params: inferred.params,
+                  })
+                : undefined;
+          Promise.resolve(maybe)
+            .then((res) => {
+              const activationResult =
+                res === "no-match" || res === false ? "no-match" : "success";
+              dispatch(
+                voiceActions.activate({
+                  type: "VOICE/ACTIVATE",
+                  payload: {
+                    sessionId: sessionIdRef.current,
+                    intent: inferred.name,
+                    activationResult,
+                  },
+                })
+              );
+              track("ui.voice", {
+                phase: "activate",
+                origin,
+                sessionId: sessionIdRef.current,
+                intent: inferred.name,
+                activationResult,
+                params: inferred.params,
+              });
+            })
+            .catch((err) => {
+              dispatch(
+                voiceActions.error({
+                  type: "VOICE/ERROR",
+                  payload: {
+                    sessionId: sessionIdRef.current,
+                    error: String(err),
+                  },
+                })
+              );
+              track("ui.voice", {
+                phase: "error",
+                origin,
+                sessionId: sessionIdRef.current,
+                error: String(err),
+              });
+            });
+        }
+      } catch (err) {
+        dispatch(
+          voiceActions.error({
+            type: "VOICE/ERROR",
+            payload: { sessionId: sessionIdRef.current, error: String(err) },
+          })
+        );
+        track("ui.voice", {
+          phase: "error",
+          origin,
+          sessionId: sessionIdRef.current,
+          error: String(err),
+        });
       }
     };
 
     rec.onerror = (e: any) => {
-      clearStartWatchdog();
-      startingRef.current = false;
-      dispatch(voiceActions.error({ type: "VOICE/ERROR", payload: { sessionId: sessionIdRef.current, error: e?.error || "unknown" } }));
-      track("ui.voice", { phase: "error", origin, sessionId: sessionIdRef.current, error: e?.error });
+      try {
+        clearStartWatchdog();
+        startingRef.current = false;
+        dispatch(
+          voiceActions.error({
+            type: "VOICE/ERROR",
+            payload: {
+              sessionId: sessionIdRef.current,
+              error: e?.error || "unknown",
+            },
+          })
+        );
+        track("ui.voice", {
+          phase: "error",
+          origin,
+          sessionId: sessionIdRef.current,
+          error: e?.error,
+        });
+      } catch (err) {
+        dispatch(
+          voiceActions.error({
+            type: "VOICE/ERROR",
+            payload: { sessionId: sessionIdRef.current, error: String(err) },
+          })
+        );
+        track("ui.voice", {
+          phase: "error",
+          origin,
+          sessionId: sessionIdRef.current,
+          error: String(err),
+        });
+      }
     };
 
     rec.onend = () => {
-      clearStartWatchdog();
-      startingRef.current = false;
-      const latencyMs = Math.round(performance.now() - startedAt.current);
-      dispatch(voiceActions.end({ type: "VOICE/END", payload: { sessionId: sessionIdRef.current, latencyMs } }));
-      track("ui.voice", { phase: "end", origin, sessionId: sessionIdRef.current, latencyMs });
+      try {
+        clearStartWatchdog();
+        startingRef.current = false;
+        const latencyMs = Math.round(performance.now() - startedAt.current);
+        dispatch(
+          voiceActions.end({
+            type: "VOICE/END",
+            payload: { sessionId: sessionIdRef.current, latencyMs },
+          })
+        );
+        track("ui.voice", {
+          phase: "end",
+          origin,
+          sessionId: sessionIdRef.current,
+          latencyMs,
+        });
+      } catch (err) {
+        dispatch(
+          voiceActions.error({
+            type: "VOICE/ERROR",
+            payload: { sessionId: sessionIdRef.current, error: String(err) },
+          })
+        );
+        track("ui.voice", {
+          phase: "error",
+          origin,
+          sessionId: sessionIdRef.current,
+          error: String(err),
+        });
+      }
     };
 
     return rec;
@@ -503,39 +677,53 @@ export function useVoice(
 
   const start = () => {
     if (!hasSR) return;
-    const rec = recRef.current ?? createRecognizer();
-    if (!rec) return;
-    recRef.current = rec;
-
     if (startingRef.current) return; // already starting
-    startingRef.current = true;
-    startAttemptAtRef.current = Date.now();
 
-    // Watchdog: if engine never emits onstart, recreate recognizer once and retry
-    clearStartWatchdog();
-    startWatchdogIdRef.current = window.setTimeout(() => {
-      if (!startingRef.current) return; // onstart already happened
-      try { rec.abort?.(); } catch {}
-      try { rec.stop?.(); } catch {}
-      // Recreate recognizer and try once more
-      const fresh = createRecognizer();
-      if (fresh) {
-        recRef.current = fresh;
-        try { fresh.start(); } catch {}
-      }
-    }, 1500);
+    const prev = recRef.current;
 
-    try {
-      rec.start();
-    } catch (err) {
-      // Some engines throw InvalidStateError if started too early; attempt a recreate and retry
-      try { rec.abort?.(); } catch {}
-      const fresh = createRecognizer();
-      if (fresh) {
-        recRef.current = fresh;
-        try { fresh.start(); } catch {}
+    const doStart = () => {
+      const rec = createRecognizer();
+      if (!rec) {
+        startingRef.current = false;
+        return;
       }
+      recRef.current = rec;
+      startingRef.current = true;
+      startAttemptAtRef.current = Date.now();
+
+      // Watchdog: if engine never emits onstart, recreate recognizer once and retry
+      clearStartWatchdog();
+      startWatchdogIdRef.current = window.setTimeout(() => {
+        if (!startingRef.current) return; // onstart already happened
+        try { rec.abort?.(); } catch {}
+        try { rec.stop?.(); } catch {}
+        const fresh = createRecognizer();
+        if (fresh) {
+          recRef.current = fresh;
+          try { fresh.start(); } catch {}
+        }
+      }, 1500);
+
+      try { rec.start(); } catch (err) {
+        try { rec.abort?.(); } catch {}
+        const fresh = createRecognizer();
+        if (fresh) {
+          recRef.current = fresh;
+          try { fresh.start(); } catch {}
+        }
+      }
+    };
+
+    if (prev) {
+      // Stop the previous recognizer first, then start a fresh one after a brief delay
+      try { prev.abort?.(); } catch {}
+      try { prev.stop?.(); } catch {}
+      setTimeout(doStart, 350);
+      return;
     }
+
+    // No previous recognizer — start immediately
+    doStart();
   };
 
   const stop = () => {

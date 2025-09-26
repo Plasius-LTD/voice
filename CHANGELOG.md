@@ -12,6 +12,20 @@ The format is based on **[Keep a Changelog](https://keepachangelog.com/en/1.1.0/
   - (placeholder)
 
 - **Changed**
+  - (placeholder)
+
+- **Fixed**
+  - (placeholder)
+
+- **Security**
+  - (placeholder)
+
+## [1.0.9] - 2025-09-26
+
+- **Added**
+  - (placeholder)
+
+- **Changed**
   - Separated WebSpeech engine into its own module (`engine/webspeech.ts`) for clearer responsibilities and improved testability.
 
 - **Fixed**
@@ -122,7 +136,7 @@ The format is based on **[Keep a Changelog](https://keepachangelog.com/en/1.1.0/
 
 ---
 
-[Unreleased]: https://github.com/Plasius-LTD/voice/compare/v1.0.8...HEAD
+[Unreleased]: https://github.com/Plasius-LTD/voice/compare/v1.0.9...HEAD
 
 [1.0.0]: https://github.com/Plasius-LTD/voice/releases/tag/v1.0.0
 [1.0.4]: https://github.com/Plasius-LTD/voice/releases/tag/v1.0.4
@@ -130,3 +144,4 @@ The format is based on **[Keep a Changelog](https://keepachangelog.com/en/1.1.0/
 [1.0.6]: https://github.com/Plasius-LTD/voice/releases/tag/v1.0.6
 [1.0.7]: https://github.com/Plasius-LTD/voice/releases/tag/v1.0.7
 [1.0.8]: https://github.com/Plasius-LTD/voice/releases/tag/v1.0.8
+[1.0.9]: https://github.com/Plasius-LTD/voice/releases/tag/v1.0.9

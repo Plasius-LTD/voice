@@ -12,7 +12,7 @@ The format is based on **[Keep a Changelog](https://keepachangelog.com/en/1.1.0/
   - (placeholder)
 
 - **Changed**
-  - (placeholder)
+  - Separated WebSpeech engine into its own module (`engine/webspeech.ts`) for clearer responsibilities and improved testability.
 
 - **Fixed**
   - (placeholder)

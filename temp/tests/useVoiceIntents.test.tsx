@@ -1,4 +1,4 @@
-import { useVoiceIntents } from "../src/components/useVoiceIntents.js";
+import { useVoiceIntents } from "../../src/components/useVoiceIntents.js";
 import React, { useEffect } from "react";
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 import {
@@ -8,7 +8,7 @@ import {
   waitFor,
   act,
 } from "@testing-library/react";
-import { VoiceProvider } from "../src/components/voiceProvider.js"; // ✅ ensure hook runs inside provider
+import { VoiceProvider } from "../../src/components/voiceProvider.js"; // ✅ ensure hook runs inside provider
 
 // ---- Minimal Web Speech API mock ------------------------------------------
 class FakeSpeechRecognitionResultList extends Array<any> {
@@ -88,7 +88,7 @@ globalThis.SpeechRecognition = FakeSpeechRecognition as any;
 globalThis.webkitSpeechRecognition = FakeSpeechRecognition as any;
 
 // ---- Import the real hook under test --------------------------------------
-import type { IntentHandler } from "../src/components/useVoiceIntents.js";
+import type { IntentHandler } from "../../src/components/useVoiceIntents.js";
 
 // Helpers to normalize API surface across implementations
 function callStart(api: any) {

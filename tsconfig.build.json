@@ -5,7 +5,7 @@
     "lib": ["ESNext", "DOM"],
     "moduleResolution": "NodeNext",
     "jsx": "react-jsx",
-    "types": ["node", "vitest"],
+    "types": ["node", "vitest", "react"],
     "declaration": true,
     "sourceMap": true,
     "strict": true,

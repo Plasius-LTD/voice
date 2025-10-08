@@ -1,7 +1,7 @@
 // File: voice/src/components/voiceIntents.tsx
 import React, { useEffect, useRef } from "react";
-import type { IntentHandler } from "./useVoice.js";
-import { registerVoiceIntents, unregisterVoiceIntents } from "./useVoice.js";
+import { useVoiceIntents, type IntentHandler } from "./useVoiceIntents.js";
+import { VoiceProvider, useVoiceContext } from "./voiceProvider.js";
 
 export type IntentSpec = {
   /** Unique intent name */
@@ -22,17 +22,18 @@ export type VoiceIntentsProps = {
 };
 
 /**
- * React component that auto-registers voice intents while it is mounted.
- * Intents are unregistered on unmount, or when `enabled` flips to false.
- *
- * Pro tip: memoize `intents` with useMemo to avoid churn.
+ * Internal component that does the actual registration work using the hook.
+ * Separated so we can optionally wrap it with <VoiceProvider/> when no provider
+ * is present in the tree, preventing "Invalid hook call" errors in tests/apps
+ * that render <VoiceIntents/> without the provider.
  */
-export const VoiceIntents: React.FC<VoiceIntentsProps> = ({
+const VoiceIntentsInner: React.FC<VoiceIntentsProps> = ({
   origin,
   intents,
   enabled = true,
 }) => {
   const registeredNamesRef = useRef<string[] | null>(null);
+  const { unregisterVoiceIntents, registerVoiceIntents } = useVoiceIntents();
 
   useEffect(() => {
     if (!enabled) {
@@ -62,6 +63,25 @@ export const VoiceIntents: React.FC<VoiceIntentsProps> = ({
 };
 
 /**
+ * React component that auto-registers voice intents while it is mounted.
+ * Intents are unregistered on unmount, or when `enabled` flips to false.
+ *
+ * This component is resilient: if it's rendered outside a <VoiceProvider/>,
+ * it will automatically wrap itself with a provider so hooks remain valid.
+ *
+ * Pro tip: memoize `intents` with useMemo to avoid churn.
+ */
+export const VoiceIntents: React.FC<VoiceIntentsProps> = (props) => {
+  // Safe even without provider: useContext returns the default value.
+  const ctx = useVoiceContext?.();
+  const content = <VoiceIntentsInner {...props} />;
+
+  // If there is no provider in the tree, supply one so that useVoiceIntents()
+  // (which depends on provider-backed context/state) is called validly.
+  return ctx ? content : <VoiceProvider>{content}</VoiceProvider>;
+};
+
+/**
  * Hook version if you prefer using hooks rather than a component.
  * Registers intents on mount and unregisters on unmount.
  */
@@ -70,6 +90,7 @@ export function useAutoVoiceIntents(
   intents: IntentSpec[],
   enabled = true
 ) {
+  const { unregisterVoiceIntents, registerVoiceIntents } = useVoiceIntents();
   useEffect(() => {
     if (!enabled) return;
     registerVoiceIntents(origin, intents);

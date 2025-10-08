@@ -11,16 +11,16 @@ const { useVoiceSpy } = vi.hoisted(() => ({
   })),
 }));
 
-// Match the provider's ESM import path ("./useVoice.js")
-vi.mock("../src/components/useVoice.js", () => ({
-  useVoice: useVoiceSpy,
+// Match the provider's ESM import path ("./useVoiceIntents.js")
+vi.mock("../src/components/useVoiceIntents.js", () => ({
+  useVoiceIntents: useVoiceSpy,
 }));
 
 import {
   VoiceProvider,
   useVoiceContext,
   WithVoice,
-} from "../src/components/voiceProvider";
+} from "../src/components/voiceProvider.js";
 
 // Helper components
 const Probe: React.FC = () => {

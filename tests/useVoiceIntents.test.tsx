@@ -1,5 +1,5 @@
-import { registerVoiceIntents, unregisterVoiceIntents, getRegisteredIntentNames } from "../src/components/useVoice.js";
-import React from "react";
+import { useVoiceIntents } from "../src/components/useVoiceIntents.js";
+import React, { useEffect } from "react";
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 import {
   render,
@@ -8,6 +8,7 @@ import {
   waitFor,
   act,
 } from "@testing-library/react";
+import { VoiceProvider } from "../src/components/voiceProvider.js"; // ✅ ensure hook runs inside provider
 
 // ---- Minimal Web Speech API mock ------------------------------------------
 class FakeSpeechRecognitionResultList extends Array<any> {
@@ -87,8 +88,7 @@ globalThis.SpeechRecognition = FakeSpeechRecognition as any;
 globalThis.webkitSpeechRecognition = FakeSpeechRecognition as any;
 
 // ---- Import the real hook under test --------------------------------------
-import { useVoice } from "../src/components/useVoice.js";
-import type { IntentHandler } from "../src/components/useVoice";
+import type { IntentHandler } from "../src/components/useVoiceIntents.js";
 
 // Helpers to normalize API surface across implementations
 function callStart(api: any) {
@@ -110,16 +110,20 @@ async function startAndGetSR() {
     fireEvent.click(screen.getByTestId("start"));
   });
   const sr = (FakeSpeechRecognition as any).last?.();
-  if (!sr) throw new Error("FakeSpeechRecognition instance was not created; did you render Harness and click start?");
+
+  if (!sr)
+    throw new Error(
+      "FakeSpeechRecognition instance was not created; did you render Harness and click start?"
+    );
   return sr;
 }
 
 // ---- Test harness component ------------------------------------------------
 const Harness: React.FC<{
-  opts?: Parameters<typeof useVoice>[0];
-  onProbe?: (api: ReturnType<typeof useVoice>) => void;
+  opts?: Parameters<typeof useVoiceIntents>[0];
+  onProbe?: (api: ReturnType<typeof useVoiceIntents>) => void;
 }> = ({ opts, onProbe }) => {
-  const api: any = useVoice(opts ?? {});
+  const api: any = useVoiceIntents(opts ?? {});
   onProbe?.(api);
   return (
     <div>
@@ -133,6 +137,24 @@ const Harness: React.FC<{
     </div>
   );
 };
+
+// A minimal component to safely access registry functions from the hook
+const RegistryHarness: React.FC<{
+  origin?: string;
+  setup?: (api: ReturnType<typeof useVoiceIntents>) => void;
+}> = ({ origin, setup }) => {
+  const api = useVoiceIntents({ origin } as any);
+  useEffect(() => {
+    setup?.(api);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [api]);
+  return null;
+};
+
+// Small helper to always render inside the provider (prevents invalid hook call paths)
+function renderWithProvider(ui: React.ReactElement) {
+  return render(<VoiceProvider>{ui}</VoiceProvider>);
+}
 
 // Shared spies provided via options
 let activateSpy: ReturnType<typeof vi.fn>;
@@ -151,9 +173,9 @@ afterEach(() => {
 
 // ---- Tests -----------------------------------------------------------------
 
-describe("useVoice – initialization and start/stop", () => {
+describe("useVoiceIntents – initialization and start/stop", () => {
   it("applies lang & interim options and calls SR.start/stop", async () => {
-    render(<Harness opts={{ lang: "en-GB", interim: true }} />);
+    renderWithProvider(<Harness opts={{ lang: "en-GB", interim: true }} />);
     const sr = await startAndGetSR();
     // Config set on recognition (applied at creation time)
     expect(sr.lang).toBe("en-GB");
@@ -170,9 +192,11 @@ describe("useVoice – initialization and start/stop", () => {
   });
 });
 
-describe("useVoice – interim vs final results + activate + redact", () => {
+describe("useVoiceIntents – interim vs final results + activate + redact", () => {
   it("does not call activate on interim, but calls with redacted text on final", async () => {
-    render(<Harness opts={{ activate: activateSpy, redact: redactSpy }} />);
+    renderWithProvider(
+      <Harness opts={{ activate: activateSpy, redact: redactSpy }} />
+    );
     const sr = await startAndGetSR();
 
     // Emit an interim result
@@ -187,22 +211,16 @@ describe("useVoice – interim vs final results + activate + redact", () => {
     });
     expect(activateSpy).toHaveBeenCalledTimes(1);
 
-    // We can't assume the payload shape (it may be an intent key like "no.intent").
-    // Instead, assert that our redact function was invoked with the original text,
-    // and that its output matches the expected redacted form.
-    // Wrap redactSpy with vi.fn to capture calls
-
     // Ensure redact was called with the raw transcript and produced the redacted form
-    // (Note: redactSpy is defined above and used via opts)
     expect(redactSpy("Call 123 Alice")).toBe("Call ### Alice");
     expect(redactSpy).toHaveBeenCalled();
     expect(redactSpy).toHaveBeenCalledWith("Call 123 Alice");
   });
 });
 
-describe("useVoice – final results without redact", () => {
+describe("useVoiceIntents – final results without redact", () => {
   it("calls activate on final without using redact", async () => {
-    render(<Harness opts={{ activate: activateSpy }} />);
+    renderWithProvider(<Harness opts={{ activate: activateSpy }} />);
     const sr = await startAndGetSR();
 
     await act(async () => {
@@ -215,9 +233,9 @@ describe("useVoice – final results without redact", () => {
   });
 });
 
-describe("useVoice – abort flow", () => {
+describe("useVoiceIntents – abort flow", () => {
   it("abort() ends listening and triggers onend", async () => {
-    render(<Harness />);
+    renderWithProvider(<Harness />);
     const sr = await startAndGetSR();
     expect(sr.start).toHaveBeenCalledTimes(1);
 
@@ -235,9 +253,9 @@ describe("useVoice – abort flow", () => {
   });
 });
 
-describe("useVoice – stop when not started", () => {
+describe("useVoiceIntents – stop when not started", () => {
   it("stop() when not listening does not throw and remains not listening", async () => {
-    render(<Harness />);
+    renderWithProvider(<Harness />);
 
     await act(async () => {
       fireEvent.click(screen.getByTestId("stop"));
@@ -247,21 +265,23 @@ describe("useVoice – stop when not started", () => {
   });
 });
 
-describe("useVoice – rerender with new lang", () => {
+describe("useVoiceIntents – rerender with new lang", () => {
   it("applies new lang on rerender", async () => {
-    const { rerender } = render(<Harness opts={{ lang: "en-GB" }} />);
+    const { rerender } = renderWithProvider(<Harness opts={{ lang: "en-GB" }} />);
     const first = await startAndGetSR();
     expect(first.lang).toBe("en-GB");
-    await act(async () => { fireEvent.click(screen.getByTestId("stop")); });
+    await act(async () => {
+      fireEvent.click(screen.getByTestId("stop"));
+    });
 
-    rerender(<Harness opts={{ lang: "en-US" }} />);
+    rerender(<VoiceProvider><Harness opts={{ lang: "en-US" }} /></VoiceProvider>);
     const second = await startAndGetSR();
     // Either we reconfigure the same instance or construct a new one; assert current reflects new lang
     expect(second.lang).toBe("en-US");
   });
 });
 
-describe("useVoice – unsupported environment", () => {
+describe("useVoiceIntents – unsupported environment", () => {
   it("reports supported=false and stays not listening", () => {
     const savedSR = (globalThis as any).SpeechRecognition;
     const savedWebkit = (globalThis as any).webkitSpeechRecognition;
@@ -272,7 +292,7 @@ describe("useVoice – unsupported environment", () => {
     delete (globalThis as any).webkitSpeechRecognition;
 
     let api: any;
-    render(<Harness onProbe={(a) => (api = a)} />);
+    renderWithProvider(<Harness onProbe={(a) => (api = a)} />);
 
     expect(api?.supported).toBe(false);
     expect(screen.getByTestId("listening").textContent).toBe("false");
@@ -283,14 +303,14 @@ describe("useVoice – unsupported environment", () => {
   });
 });
 
-describe("useVoice – webkit fallback and config flags", () => {
+describe("useVoiceIntents – webkit fallback and config flags", () => {
   it("uses webkit SR when standard is missing and applies config flags", async () => {
     const savedSR = (globalThis as any).SpeechRecognition;
     // Remove standard SR, leave webkit in place (already set by our Fake)
     // @ts-ignore
     delete (globalThis as any).SpeechRecognition;
 
-    render(
+    renderWithProvider(
       <Harness opts={{ lang: "en-AU", interim: false, continuous: true }} />
     );
 
@@ -304,48 +324,67 @@ describe("useVoice – webkit fallback and config flags", () => {
   });
 });
 
-
-describe("useVoice – registered intent takes precedence over activate", () => {
+describe("useVoiceIntents – registered intent takes precedence over activate", () => {
   it("calls origin-scoped registered handler with params and does not call activate prop", async () => {
-    const handler: IntentHandler = (vi.fn(async () => ({ status: "success" } as any)) as unknown) as IntentHandler;
-    registerVoiceIntents("TestPage", [
-      {
-        name: "cart.addItem",
-        patterns: [/add to (cart|basket|bag)/i],
-        handler,
-      },
-    ]);
+    let registryApi: ReturnType<typeof useVoiceIntents> | undefined;
+    const handler: IntentHandler = vi.fn(async () => ({ status: "success" }) as any) as unknown as IntentHandler;
 
-    render(<Harness opts={{ origin: "TestPage", activate: activateSpy }} />);
+    renderWithProvider(
+      <>
+        <RegistryHarness
+          origin="TestPage"
+          setup={(api) => {
+            registryApi = api;
+            api.registerVoiceIntents("TestPage", [
+              {
+                name: "cart.addItem",
+                patterns: [/add to (cart|basket|bag)/i],
+                handler,
+              },
+            ]);
+          }}
+        />
+        <Harness opts={{ origin: "TestPage", activate: activateSpy }} />
+      </>
+    );
+
     const sr = await startAndGetSR();
-
     await act(async () => {
       sr._emitResult("please add to cart", true);
     });
 
-    // Registered handler should be called instead of activateSpy
     expect(handler).toHaveBeenCalledTimes(1);
     expect(activateSpy).not.toHaveBeenCalled();
 
     // Clean up registry for this origin
-    unregisterVoiceIntents("TestPage");
+    registryApi?.unregisterVoiceIntents("TestPage");
   });
 });
 
-describe("useVoice – global ('*') registered intents work for any origin", () => {
+describe("useVoiceIntents – global ('*') registered intents work for any origin", () => {
   it("uses global handler when no origin handler exists", async () => {
-    const handler: IntentHandler = (vi.fn(async () => ({ status: "success" } as any)) as unknown) as IntentHandler;
-    registerVoiceIntents("*", [
-      {
-        name: "open.menu",
-        patterns: ["open menu"],
-        handler,
-      },
-    ]);
+    let registryApi: ReturnType<typeof useVoiceIntents> | undefined;
+    const handler: IntentHandler = vi.fn(async () => ({ status: "success" }) as any) as unknown as IntentHandler;
 
-    render(<Harness opts={{ origin: "DifferentPage", activate: activateSpy }} />);
+    renderWithProvider(
+      <>
+        <RegistryHarness
+          setup={(api) => {
+            registryApi = api;
+            api.registerVoiceIntents("*", [
+              {
+                name: "open.menu",
+                patterns: ["open menu"],
+                handler,
+              },
+            ]);
+          }}
+        />
+        <Harness opts={{ origin: "DifferentPage", activate: activateSpy }} />
+      </>
+    );
+
     const sr = await startAndGetSR();
-
     await act(async () => {
       sr._emitResult("could you open menu", true);
     });
@@ -353,41 +392,60 @@ describe("useVoice – global ('*') registered intents work for any origin", () 
     expect(handler).toHaveBeenCalledTimes(1);
     expect(activateSpy).not.toHaveBeenCalled();
 
-    unregisterVoiceIntents("*");
+    registryApi?.unregisterVoiceIntents("*");
   });
 });
 
-describe("useVoice – unregister removes handlers and falls back to activate", () => {
+describe("useVoiceIntents – unregister removes handlers and falls back to activate", () => {
   it("after unregister, activation falls back to activate prop", async () => {
-    const handler: IntentHandler = (vi.fn(async () => ({ status: "success" } as any)) as unknown) as IntentHandler;
-    registerVoiceIntents("TestPage2", [
-      { name: "open.help", patterns: ["help"], handler },
-    ]);
+    let registryApi: ReturnType<typeof useVoiceIntents> | undefined;
+    const handler: IntentHandler = vi.fn(async () => ({ status: "success" }) as any) as unknown as IntentHandler;
 
-    render(<Harness opts={{ origin: "TestPage2", activate: activateSpy }} />);
+    renderWithProvider(
+      <>
+        <RegistryHarness
+          origin="TestPage2"
+          setup={(api) => {
+            registryApi = api;
+            api.registerVoiceIntents("TestPage2", [
+              { name: "open.help", patterns: ["help"], handler },
+            ]);
+          }}
+        />
+        <Harness opts={{ origin: "TestPage2", activate: activateSpy }} />
+      </>
+    );
+
     const sr = await startAndGetSR();
-    await act(async () => { sr._emitResult("help", true); });
+    await act(async () => {
+      sr._emitResult("help", true);
+    });
     expect(handler).toHaveBeenCalledTimes(1);
     expect(activateSpy).not.toHaveBeenCalled();
 
     // Unregister and try again
-    unregisterVoiceIntents("TestPage2");
-    await act(async () => { sr._emitResult("help", true); });
+    registryApi?.unregisterVoiceIntents("TestPage2");
+    await act(async () => {
+      sr._emitResult("help", true);
+    });
 
-    // Now the fallback activate should be used
     expect(activateSpy).toHaveBeenCalled();
   });
 });
 
-describe("useVoice – default intent inference and quantity parsing", () => {
+describe("useVoiceIntents – default intent inference and quantity parsing", () => {
   it("infers cart.incrementItem with numeric and word quantities", async () => {
-    render(<Harness opts={{ origin: "CartPage", activate: activateSpy }} />);
+    renderWithProvider(<Harness opts={{ origin: "CartPage", activate: activateSpy }} />);
     const sr = await startAndGetSR();
 
     // Word quantity
-    await act(async () => { sr._emitResult("add one", true); });
+    await act(async () => {
+      sr._emitResult("add one", true);
+    });
     // Numeric quantity
-    await act(async () => { sr._emitResult("add 2", true); });
+    await act(async () => {
+      sr._emitResult("add 2", true);
+    });
 
     // We can't see params directly here, but ensure activate was invoked at least twice
     expect(activateSpy.mock.calls.length).toBeGreaterThanOrEqual(2);
@@ -396,12 +454,18 @@ describe("useVoice – default intent inference and quantity parsing", () => {
 
 // ---------------- Additional coverage: interim=false should not record partials ----------------
 
-describe("useVoice – interim disabled does not set partial or redact", () => {
+describe("useVoiceIntents – interim disabled does not set partial or redact", () => {
   it("ignores interim results when interim=false", async () => {
-    render(<Harness opts={{ interim: false, activate: activateSpy, redact: redactSpy }} />);
+    renderWithProvider(
+      <Harness
+        opts={{ interim: false, activate: activateSpy, redact: redactSpy }}
+      />
+    );
     const sr = await startAndGetSR();
 
-    await act(async () => { sr._emitResult("this is interim only", false); });
+    await act(async () => {
+      sr._emitResult("this is interim only", false);
+    });
 
     // redact should not be called for interim when interim=false
     expect(redactSpy).not.toHaveBeenCalled();
@@ -412,7 +476,7 @@ describe("useVoice – interim disabled does not set partial or redact", () => {
 
 // ---------------- Additional coverage: default intent mapping table ----------------
 
-describe("useVoice – default intent inference table", () => {
+describe("useVoiceIntents – default intent inference table", () => {
   const cases: Array<{ utterance: string; intent: string }> = [
     { utterance: "open menu", intent: "open.menu" },
     { utterance: "please close menu", intent: "close.menu" },
@@ -435,12 +499,14 @@ describe("useVoice – default intent inference table", () => {
   ];
 
   it("fires activate with expected intent for a variety of utterances", async () => {
-    render(<Harness opts={{ origin: "AnyPage", activate: activateSpy }} />);
+    renderWithProvider(<Harness opts={{ origin: "AnyPage", activate: activateSpy }} />);
     const sr = await startAndGetSR();
 
     for (const c of cases) {
       activateSpy.mockClear();
-      await act(async () => { sr._emitResult(c.utterance, true); });
+      await act(async () => {
+        sr._emitResult(c.utterance, true);
+      });
       // First arg to activate is the intent string inferred
       expect(activateSpy).toHaveBeenCalled();
       const firstArg = (activateSpy.mock.calls[0] as any[])[0];
@@ -451,55 +517,69 @@ describe("useVoice – default intent inference table", () => {
 
 // ---------------- Additional coverage: registry names & partial unregister ----------------
 
-describe("useVoice – registry name reporting and partial unregister", () => {
+describe("useVoiceIntents – registry name reporting and partial unregister", () => {
   it("combines origin and global names and filters on unregister(names)", () => {
-    // Register two on origin and one global
-    const noopHandler: IntentHandler = (vi.fn(async () => ({ status: "success" } as any)) as unknown) as IntentHandler;
-    registerVoiceIntents("OriginA", [
-      { name: "open.menu", patterns: ["open menu"], handler: noopHandler },
-      { name: "close.menu", patterns: ["close menu"], handler: noopHandler },
-    ]);
-    registerVoiceIntents("*", [
-      { name: "search.query", patterns: ["search"], handler: noopHandler },
-    ]);
+    let registryApi: ReturnType<typeof useVoiceIntents> | undefined;
+    const noopHandler: IntentHandler = vi.fn(async () => ({ status: "success" }) as any) as unknown as IntentHandler;
 
-    // Should include both origin-specific and global names
-    const combined = getRegisteredIntentNames("OriginA");
-    expect(combined).toEqual(expect.arrayContaining(["open.menu", "close.menu", "search.query"]));
+    renderWithProvider(
+      <RegistryHarness
+        origin="OriginA"
+        setup={(api) => {
+          registryApi = api;
+          api.registerVoiceIntents("OriginA", [
+            { name: "open.menu", patterns: ["open menu"], handler: noopHandler },
+            { name: "close.menu", patterns: ["close menu"], handler: noopHandler },
+          ]);
+          api.registerVoiceIntents("*", [
+            { name: "search.query", patterns: ["search"], handler: noopHandler },
+          ]);
+        }}
+      />
+    );
 
-    // Now unregister only one name from origin
-    unregisterVoiceIntents("OriginA", ["close.menu"]);
-    const after = getRegisteredIntentNames("OriginA");
+    const combined = registryApi!.getRegisteredIntentNames("OriginA");
+    expect(combined).toEqual(
+      expect.arrayContaining(["open.menu", "close.menu", "search.query"])
+    );
+
+    registryApi!.unregisterVoiceIntents("OriginA", ["close.menu"]);
+    const after = registryApi!.getRegisteredIntentNames("OriginA");
     expect(after).toEqual(expect.arrayContaining(["open.menu", "search.query"]));
     expect(after).not.toEqual(expect.arrayContaining(["close.menu"]));
 
     // Cleanup
-    unregisterVoiceIntents("OriginA");
-    unregisterVoiceIntents("*");
+    registryApi!.unregisterVoiceIntents("OriginA");
+    registryApi!.unregisterVoiceIntents("*");
   });
 });
 
-
-describe("useVoice – listening state transitions", () => {
+describe("useVoiceIntents – listening state transitions", () => {
   it("sets listening=true on onstart and false on onend", async () => {
-    render(<Harness />);
+    renderWithProvider(<Harness />);
     const sr = await startAndGetSR();
     // Simulate low-level engine start
-    await act(async () => { sr.onstart && sr.onstart(); });
+    await act(async () => {
+      sr.onstart && sr.onstart();
+    });
     expect(screen.getByTestId("listening").textContent).toBe("true");
 
     // Stop → onend should flip listening to false
-    await act(async () => { fireEvent.click(screen.getByTestId("stop")); });
+    await act(async () => {
+      fireEvent.click(screen.getByTestId("stop"));
+    });
     await waitFor(() => {
       expect(screen.getByTestId("listening").textContent).toBe("false");
     });
   });
 
   it("sets listening=false when an error occurs", async () => {
-    render(<Harness />);
+    renderWithProvider(<Harness />);
     const sr = await startAndGetSR();
     // Simulate engine error (e.g., not-allowed/no-speech)
-    await act(async () => { sr._emitError("not-allowed"); });
+    await act(async () => {
+      sr._emitError("not-allowed");
+    });
 
     await waitFor(() => {
       expect(screen.getByTestId("listening").textContent).toBe("false");
@@ -507,7 +587,7 @@ describe("useVoice – listening state transitions", () => {
   });
 
   it("remains false if onend fires without a prior start", async () => {
-    render(<Harness />);
+    renderWithProvider(<Harness />);
     expect(screen.getByTestId("listening").textContent).toBe("false");
   });
 });

@@ -3,14 +3,14 @@
 import React, { createContext, useContext, useMemo } from "react";
 
 // NOTE: Adjust the import path if your hook lives elsewhere
-import { useVoice } from "./useVoice.js";
+import { useVoiceIntents } from "./useVoiceIntents.js";
 
 /**
  * VoiceContextValue
  * Infer the shape of the voice API directly from the useVoice hook to avoid
  * duplicating types. Whatever your hook returns becomes the context value.
  */
-export type VoiceContextValue = ReturnType<typeof useVoice>;
+export type VoiceContextValue = ReturnType<typeof useVoiceIntents>;
 
 /**
  * The React Context that exposes the voice API from `useVoice`.
@@ -32,7 +32,7 @@ export interface VoiceProviderProps {
    * Options forwarded to `useVoice(options)`; typed from the hook's parameters
    * to stay in lockstep with the hook's API.
    */
-  readonly options?: Parameters<typeof useVoice>[0];
+  readonly options?: Parameters<typeof useVoiceIntents>[0];
 }
 
 /**
@@ -44,7 +44,7 @@ export interface VoiceProviderProps {
  * the hook/state.
  */
 export const VoiceProvider: React.FC<VoiceProviderProps> = ({ children, options }) => {
-  const api = useVoice(options as Parameters<typeof useVoice>[0]);
+  const api = useVoiceIntents(options as Parameters<typeof useVoiceIntents>[0]);
 
   // Avoid unnecessary provider updates if the hook returns a stable reference
   // but still memoize to be explicit about intent.

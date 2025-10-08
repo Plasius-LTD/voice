@@ -9,16 +9,36 @@ The format is based on **[Keep a Changelog](https://keepachangelog.com/en/1.1.0/
 ## [Unreleased]
 
 - **Added**
-  - (placeholder)
+  - New `useVoiceControl` hook consolidating voice control concerns (mute, volume, push‑to‑talk, global input listeners) with a clean API. (`src/components/useVoiceControl.ts`)
+  - New `useWebSpeechEngine` hook to manage SpeechRecognition lifecycle with a testable interface. (`src/engine/useWebSpeechEngine.ts`)
+  - Global voice store for app‑level state (mute, volume, PTT state, language) and intent/event wiring. (`src/stores/global.store.ts`)
+  - `voiceAdapter` abstraction and `stopAndWait` utility to coordinate engine start/stop. (`src/utils/voiceAdapter.ts`, `src/utils/stopAndWait.ts`)
+  - Test scaffolding and mocks for Web Speech, timers, environment and telemetry. (`tests/mocks/*`, `tests/types/webspeech.d.ts`)
 
 - **Changed**
-  - (placeholder)
+  - `voiceProvider.tsx` and `voiceIntents.tsx` updated to integrate with the new global store and engine hook.
+  - Build & tooling updates: TypeScript, Vite, Rollup, ESLint/TS‑ESLint, and Testing Library version bumps (see **Chore/Deps**).
+  - Export surface reorganised in `src/index.ts` to surface the new hooks and store.
+
+- **Removed**
+  - Deprecated `useVoice` and `useVoiceControls` hooks removed. (`src/components/useVoice.ts`, `src/components/useVoiceControls.ts`)
+  - Legacy WebSpeech engine removed in favour of `useWebSpeechEngine`. (`src/engine/webspeech.ts`)
+  - Old test files replaced/relocated under `temp/tests/` with new mocks.
 
 - **Fixed**
-  - (placeholder)
+  - More reliable start/stop sequencing for SpeechRecognition with guard logic and deterministic tests.
+  - Push‑to‑talk interactions are now handled consistently across keyboard, pointer and touch with store‑driven hold/toggle modes.
 
-- **Security**
-  - (placeholder)
+- **Chore/Deps**
+  - React 19.2, React‑DOM 19.2, TypeScript 5.9.3, Vite 7.1.8, Rollup 4.52.3.
+  - `@typescript-eslint/*` 8.45, `@testing-library/jest-dom` 6.9.1, and assorted minor updates (`dom-selector`, `strip-literal`, `tsx`, etc.).
+  - `@plasius/react-state` 1.0.13 (now a peer dep on React 19) and `@plasius/translations` 1.0.7.
+
+### Migration notes
+
+- Replace usages of `useVoice`/`useVoiceControls` with `useVoiceControl`.
+- If you bound PTT to `Space` only, pass `pttKeyCodes={["Space"]}` to preserve that behaviour. The default now includes `ControlLeft`, `Space`, `ControlRight`.
+- Wire UI components to the global store where needed and prefer `useWebSpeechEngine` for engine lifecycle.
 
 ## [1.0.9] - 2025-09-26
 
@@ -137,7 +157,6 @@ The format is based on **[Keep a Changelog](https://keepachangelog.com/en/1.1.0/
 ---
 
 [Unreleased]: https://github.com/Plasius-LTD/voice/compare/v1.0.9...HEAD
-
 [1.0.0]: https://github.com/Plasius-LTD/voice/releases/tag/v1.0.0
 [1.0.4]: https://github.com/Plasius-LTD/voice/releases/tag/v1.0.4
 [1.0.5]: https://github.com/Plasius-LTD/voice/releases/tag/v1.0.5

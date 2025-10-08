@@ -1,13 +1,13 @@
 export * from "./components/voiceProvider.js";
-export * from "./components/useVoice.js";
-export * from "./components/useVoiceControls.js";
+export * from "./components/useVoiceIntents.js";
+export * from "./components/useVoiceControl.js";
 export {
   VoiceProvider,
   useVoiceContext,
   WithVoice,
 } from "./components/voiceProvider.js";
-export { useVoice } from "./components/useVoice.js";
-export { useVoiceControls } from "./components/useVoiceControls.js";
+export { useVoiceIntents } from "./components/useVoiceIntents.js";
+export { useVoiceControl } from "./components/useVoiceControl.js";
 export {
   VoiceIntents,
   useAutoVoiceIntents,

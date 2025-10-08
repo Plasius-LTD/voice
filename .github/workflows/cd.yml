@@ -71,9 +71,34 @@ jobs:
 
           NAME=$(node -p "require('./package.json').name")
 
-          # If a preid is supplied with a standard bump (major/minor/patch),
-          # compute the next available prerelease version automatically:
-          if [ -n "${PREID:-}" ] && [[ "${BUMP:-patch}" =~ ^(major|minor|patch)$ ]]; then
+          # If preid is provided with bump=none, advance to next prerelease of the same preid (or start prepatch)
+          if [ -n "${PREID:-}" ] && [ "${BUMP:-patch}" = "none" ]; then
+            echo "Calculating next prerelease for current version using preid='${PREID}' (bump=none)"
+            CURRENT_VER=$(node -p "require('./package.json').version")
+
+            # Always work cleanly
+            git checkout -- package.json package-lock.json 2>/dev/null || true
+
+            if printf '%s' "$CURRENT_VER" | grep -q "-${PREID}\\."; then
+              # Already a prerelease with this preid: bump to next prerelease
+              npm version prerelease --preid "${PREID}" --no-git-tag-version >/dev/null
+            else
+              # Start a prerelease from current stable using prepatch by default
+              npm version prepatch --preid "${PREID}" --no-git-tag-version >/dev/null
+            fi
+
+            CANDIDATE=$(node -p "require('./package.json').version")
+
+            # Ensure uniqueness vs git tags and npm registry
+            while git rev-parse -q --verify "refs/tags/v${CANDIDATE}" >/dev/null 2>&1 \
+              || npm view "${NAME}@${CANDIDATE}" version >/dev/null 2>&1; do
+              npm version prerelease --preid "${PREID}" --no-git-tag-version >/dev/null
+              CANDIDATE=$(node -p "require('./package.json').version")
+            done
+
+            echo "Resolved prerelease version: ${CANDIDATE}"
+            NEW_VER="v${CANDIDATE}"
+          elif [ -n "${PREID:-}" ] && [[ "${BUMP:-patch}" =~ ^(major|minor|patch)$ ]]; then
             echo "Calculating next available prerelease for preid='${PREID}' and bump='${BUMP}'"
 
             CURRENT_VER=$(node -p "require('./package.json').version")
@@ -116,11 +141,14 @@ jobs:
           echo "version=$VER_NO_V" >> "$GITHUB_OUTPUT"
 
           echo "name=$NAME" >> "$GITHUB_OUTPUT"
-          if npm view "$NAME" version >/dev/null 2>&1; then
-            echo "flags=" >> "$GITHUB_OUTPUT"
-          else
-            echo "flags=--access public" >> "$GITHUB_OUTPUT"
+          FLAGS=""
+          if ! npm view "$NAME" version >/dev/null 2>&1; then
+            FLAGS="--access public"
           fi
+          if [ -n "${PREID:-}" ]; then
+            FLAGS="--tag ${PREID} ${FLAGS}"
+          fi
+          echo "flags=${FLAGS}" >> "$GITHUB_OUTPUT"
           
       - name: Install deps (CI)
         run: npm ci

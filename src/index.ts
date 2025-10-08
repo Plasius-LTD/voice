@@ -16,3 +16,11 @@ export type {
   IntentSpec,
   VoiceIntentsProps,
 } from "./components/voiceIntents.js";
+export {
+  globalVoiceStore,
+  type GlobalVoiceStore,
+} from "./stores/global.store.js";
+export {
+  useWebSpeechEngine,
+  type WebSpeechEngine,
+} from "./engine/useWebSpeechEngine.js";

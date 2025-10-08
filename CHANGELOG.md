@@ -37,6 +37,20 @@ The format is based on **[Keep a Changelog](https://keepachangelog.com/en/1.1.0/
 ## [1.1.0-beta.0] - 2025-10-08
 
 - **Added**
+  - (placeholder)
+
+- **Changed**
+  - (placeholder)
+
+- **Fixed**
+  - (placeholder)
+
+- **Security**
+  - (placeholder)
+
+## [1.1.0-beta.0] - 2025-10-08
+
+- **Added**
   - New `useVoiceControl` hook consolidating voice control concerns (mute, volume, push‑to‑talk, global input listeners) with a clean API. (`src/components/useVoiceControl.ts`)
   - New `useWebSpeechEngine` hook to manage SpeechRecognition lifecycle with a testable interface. (`src/engine/useWebSpeechEngine.ts`)
   - Global voice store for app‑level state (mute, volume, PTT state, language) and intent/event wiring. (`src/stores/global.store.ts`)

@@ -9,6 +9,20 @@ The format is based on **[Keep a Changelog](https://keepachangelog.com/en/1.1.0/
 ## [Unreleased]
 
 - **Added**
+  - (placeholder)
+
+- **Changed**
+  - (placeholder)
+
+- **Fixed**
+  - (placeholder)
+
+- **Security**
+  - (placeholder)
+
+## [1.1.0-beta.0] - 2025-10-08
+
+- **Added**
   - New `useVoiceControl` hook consolidating voice control concerns (mute, volume, push‑to‑talk, global input listeners) with a clean API. (`src/components/useVoiceControl.ts`)
   - New `useWebSpeechEngine` hook to manage SpeechRecognition lifecycle with a testable interface. (`src/engine/useWebSpeechEngine.ts`)
   - Global voice store for app‑level state (mute, volume, PTT state, language) and intent/event wiring. (`src/stores/global.store.ts`)
@@ -156,7 +170,7 @@ The format is based on **[Keep a Changelog](https://keepachangelog.com/en/1.1.0/
 
 ---
 
-[Unreleased]: https://github.com/Plasius-LTD/voice/compare/v1.0.9...HEAD
+[Unreleased]: https://github.com/Plasius-LTD/voice/compare/v1.1.0-beta.0...HEAD
 [1.0.0]: https://github.com/Plasius-LTD/voice/releases/tag/v1.0.0
 [1.0.4]: https://github.com/Plasius-LTD/voice/releases/tag/v1.0.4
 [1.0.5]: https://github.com/Plasius-LTD/voice/releases/tag/v1.0.5
@@ -164,3 +178,4 @@ The format is based on **[Keep a Changelog](https://keepachangelog.com/en/1.1.0/
 [1.0.7]: https://github.com/Plasius-LTD/voice/releases/tag/v1.0.7
 [1.0.8]: https://github.com/Plasius-LTD/voice/releases/tag/v1.0.8
 [1.0.9]: https://github.com/Plasius-LTD/voice/releases/tag/v1.0.9
+[1.1.0-beta.0]: https://github.com/Plasius-LTD/voice/releases/tag/v1.1.0-beta.0

@@ -48,19 +48,15 @@ jobs:
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
 
-          # Decide bump command
+          # Decide bump command (stable path only). Pre-release logic handled separately below.
           BUMP_CMD=""
           case "${BUMP:-patch}" in
             major|minor|patch)
               if [ -n "${PREID:-}" ]; then
-                # Convert to pre* if preid provided
-                case "${BUMP}" in
-                  major) BUMP_CMD="npm version premajor --preid ${PREID} -m 'chore: release v%s [skip ci]'" ;;
-                  minor) BUMP_CMD="npm version preminor --preid ${PREID} -m 'chore: release v%s [skip ci]'" ;;
-                  patch) BUMP_CMD="npm version prepatch --preid ${PREID} -m 'chore: release v%s [skip ci]'" ;;
-                esac
+                # handled below by custom prerelease resolver
+                BUMP_CMD=""
               else
-                BUMP_CMD="npm version ${BUMP} -m 'chore: release v%s [skip ci]'"
+                BUMP_CMD="npm version ${BUMP} --no-git-tag-version"
               fi
               ;;
             none)
@@ -73,23 +69,52 @@ jobs:
               ;;
           esac
 
-          if [ "${BUMP}" = "none" ]; then
+          NAME=$(node -p "require('./package.json').name")
+
+          # If a preid is supplied with a standard bump (major/minor/patch),
+          # compute the next available prerelease version automatically:
+          if [ -n "${PREID:-}" ] && [[ "${BUMP:-patch}" =~ ^(major|minor|patch)$ ]]; then
+            echo "Calculating next available prerelease for preid='${PREID}' and bump='${BUMP}'"
+
             CURRENT_VER=$(node -p "require('./package.json').version")
-            NEW_VER="v${CURRENT_VER}"
+
+            # Start from pre${BUMP} (e.g., preminor) without tagging/committing
+            npm version "pre${BUMP}" --preid "${PREID}" --no-git-tag-version >/dev/null
+            CANDIDATE=$(node -p "require('./package.json').version")
+
+            # If that candidate already exists as a git tag or on npm, advance prerelease until unique
+            while git rev-parse -q --verify "refs/tags/v${CANDIDATE}" >/dev/null 2>&1 \
+              || npm view "${NAME}@${CANDIDATE}" version >/dev/null 2>&1; do
+              npm version prerelease --preid "${PREID}" --no-git-tag-version >/dev/null
+              CANDIDATE=$(node -p "require('./package.json').version")
+            done
+
+            echo "Resolved prerelease version: ${CANDIDATE}"
+
+            # Reset working tree changes to avoid double-commit; then set exact version to create tag/commit
+            git checkout -- package.json package-lock.json 2>/dev/null || true
+            npm version "${CANDIDATE}" --no-git-tag-version >/dev/null
+            NEW_VER="v${CANDIDATE}"
           else
-            # shellcheck disable=SC2086
-            NEW_VER=$(sh -lc "$BUMP_CMD")
+            # Stable bump (or bump=none)
+            if [ "${BUMP}" = "none" ]; then
+              CURRENT_VER=$(node -p "require('./package.json').version")
+              NEW_VER="v${CURRENT_VER}"
+            else
+              # shellcheck disable=SC2086
+              sh -lc "$BUMP_CMD" >/dev/null
+              VER_NO_V=$(node -p "require('./package.json').version")
+              NEW_VER="v${VER_NO_V}"
+            fi
           fi
 
           echo "New version: $NEW_VER"
-          git push --follow-tags
           
           # Expose tag (vX.Y.Z) and version (X.Y.Z) for later steps
           VER_NO_V=${NEW_VER#v}
           echo "tag=$NEW_VER" >> "$GITHUB_OUTPUT"
           echo "version=$VER_NO_V" >> "$GITHUB_OUTPUT"
 
-          NAME=$(node -p "require('./package.json').name")
           echo "name=$NAME" >> "$GITHUB_OUTPUT"
           if npm view "$NAME" version >/dev/null 2>&1; then
             echo "flags=" >> "$GITHUB_OUTPUT"
@@ -193,6 +218,8 @@ jobs:
 
           mv "$TMP_FILE" "$FILE"
 
+          git add package.json package-lock.json 2>/dev/null || true
+
           # Update bottom compare links
           # Update [Unreleased] compare to start at v${VERSION}
           COMPARE_URL="https://github.com/${GITHUB_REPOSITORY}/compare/v${VERSION}...HEAD"
@@ -204,9 +231,10 @@ jobs:
             echo "[${VERSION}]: https://github.com/${GITHUB_REPOSITORY}/releases/tag/v${VERSION}" >> "$FILE"
           fi
 
-          git add "$FILE"
-          git commit -m "docs(changelog): release v${VERSION}"
-          git push
+          git add "$FILE" package.json package-lock.json 2>/dev/null || true
+          git commit -m "chore(release): v${VERSION}"
+          git tag "v${VERSION}"
+          git push --follow-tags
 
       - name: Create GitHub Release from tag (first-party)
         env:

@@ -3,9 +3,8 @@ import { track } from "@plasius/nfr";
 import { createStore, Store } from "@plasius/react-state";
 import { stopAndWait } from "../utils/stopAndWait.js";
 import {
-  globalVoiceStore as defaultGlobal,
-  GlobalVoiceState,
-  GlobalVoiceStore,
+  globalVoiceStore as gStore,
+  GlobalVoiceState
 } from "../stores/global.store.js";
 
 // Engine-internal state (not for general UI consumption)
@@ -72,18 +71,11 @@ const engineStore =  createStore<EngineState, EngineAction>(reducer, {
   lastError: undefined,
 });
 
-
 export function useWebSpeechEngine(opts: {
   lang: string;
   interim: boolean;
   continuous: boolean;
-  globalStore?: GlobalVoiceStore; // DI for testing
 }): WebSpeechEngine {
-
-  // Tiny engine-only store (stable across renders)
-  
-
-  const gStore = opts.globalStore ?? defaultGlobal;
   // Push option changes into the global store (no implicit start/stop)
   useEffect(() => {
     gStore.dispatch({

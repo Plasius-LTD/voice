@@ -39,50 +39,51 @@ export type WebSpeechEngine = {
 
 type SRCtor = new () => SpeechRecognition;
 
+
+const reducer = (s: EngineState, a: EngineAction): EngineState => {
+  switch (a.type) {
+    case "EVT/START":
+      return {
+        ...s,
+        sessionId: a.payload.sessionId,
+        startedAt: a.payload.startedAt,
+        lastError: undefined,
+      };
+    case "EVT/END":
+      return { ...s, endedAt: a.payload.endedAt };
+    case "EVT/ERROR":
+      return { ...s, lastError: a.payload.error };
+    case "INT/RESET":
+      return {
+        sessionId: null,
+        startedAt: undefined,
+        endedAt: undefined,
+        lastError: undefined,
+      };
+    default:
+      return s;
+  }
+};
+
+const engineStore =  createStore<EngineState, EngineAction>(reducer, {
+  sessionId: null,
+  startedAt: undefined,
+  endedAt: undefined,
+  lastError: undefined,
+});
+
+
 export function useWebSpeechEngine(opts: {
   lang: string;
   interim: boolean;
   continuous: boolean;
   globalStore?: GlobalVoiceStore; // DI for testing
 }): WebSpeechEngine {
-  const gStore = opts.globalStore ?? defaultGlobal;
 
   // Tiny engine-only store (stable across renders)
-  const engineStoreRef = useRef<Store<EngineState, EngineAction> | null>(null);
-  if (!engineStoreRef.current) {
-    const reducer = (s: EngineState, a: EngineAction): EngineState => {
-      switch (a.type) {
-        case "EVT/START":
-          return {
-            ...s,
-            sessionId: a.payload.sessionId,
-            startedAt: a.payload.startedAt,
-            lastError: undefined,
-          };
-        case "EVT/END":
-          return { ...s, endedAt: a.payload.endedAt };
-        case "EVT/ERROR":
-          return { ...s, lastError: a.payload.error };
-        case "INT/RESET":
-          return {
-            sessionId: null,
-            startedAt: undefined,
-            endedAt: undefined,
-            lastError: undefined,
-          };
-        default:
-          return s;
-      }
-    };
-    engineStoreRef.current = createStore<EngineState, EngineAction>(reducer, {
-      sessionId: null,
-      startedAt: undefined,
-      endedAt: undefined,
-      lastError: undefined,
-    });
-  }
-  const engineStore = engineStoreRef.current;
+  
 
+  const gStore = opts.globalStore ?? defaultGlobal;
   // Push option changes into the global store (no implicit start/stop)
   useEffect(() => {
     gStore.dispatch({

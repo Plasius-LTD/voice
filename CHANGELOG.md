@@ -20,6 +20,20 @@ The format is based on **[Keep a Changelog](https://keepachangelog.com/en/1.1.0/
 - **Security**
   - (placeholder)
 
+## [1.1.0-beta.7] - 2025-10-09
+
+- **Added**
+  - (placeholder)
+
+- **Changed**
+  - (placeholder)
+
+- **Fixed**
+  - (placeholder)
+
+- **Security**
+  - (placeholder)
+
 ## [1.1.0-beta.6] - 2025-10-09
 
 - **Added**
@@ -282,7 +296,7 @@ The format is based on **[Keep a Changelog](https://keepachangelog.com/en/1.1.0/
 
 ---
 
-[Unreleased]: https://github.com/Plasius-LTD/voice/compare/v1.1.0-beta.6...HEAD
+[Unreleased]: https://github.com/Plasius-LTD/voice/compare/v1.1.0-beta.7...HEAD
 [1.0.0]: https://github.com/Plasius-LTD/voice/releases/tag/v1.0.0
 [1.0.4]: https://github.com/Plasius-LTD/voice/releases/tag/v1.0.4
 [1.0.5]: https://github.com/Plasius-LTD/voice/releases/tag/v1.0.5
@@ -297,3 +311,4 @@ The format is based on **[Keep a Changelog](https://keepachangelog.com/en/1.1.0/
 [1.1.0-beta.4]: https://github.com/Plasius-LTD/voice/releases/tag/v1.1.0-beta.4
 [1.1.0-beta.5]: https://github.com/Plasius-LTD/voice/releases/tag/v1.1.0-beta.5
 [1.1.0-beta.6]: https://github.com/Plasius-LTD/voice/releases/tag/v1.1.0-beta.6
+[1.1.0-beta.7]: https://github.com/Plasius-LTD/voice/releases/tag/v1.1.0-beta.7

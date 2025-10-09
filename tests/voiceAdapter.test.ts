@@ -1,5 +1,5 @@
 import { describe, it, expect, vi } from "vitest";
-import { buildDefaultAdapter } from "../../src/utils/voiceAdapter.js";
+import { buildDefaultAdapter } from "../src/utils/voiceAdapter.js";
 
 // Helper to make a fake voice object
 const mk = (impl: Record<string, any>) => impl as any;

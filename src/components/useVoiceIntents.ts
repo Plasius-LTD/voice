@@ -1,7 +1,6 @@
 // useVoice.ts — slim adapter: initialize engine, expose status, and process intents
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { track } from "@plasius/nfr";
-import { useWebSpeechEngine } from "../engine/useWebSpeechEngine.js";
 import {
   globalVoiceStore,
   type GlobalVoiceState,
@@ -120,8 +119,7 @@ export function useVoiceIntents(opts: VoiceIntentOpts = {}): VoiceIntentView {
     redact,
     activate,
   } = opts;
-
-  const engineRef = useRef<ReturnType<typeof useWebSpeechEngine> | null>(null);
+  
   const prevFinalRef = useRef<string>("");
   const localSessionRef = useRef<{ sessionId: string | null; lastListening: boolean }>({
     sessionId: null,
@@ -147,14 +145,13 @@ export function useVoiceIntents(opts: VoiceIntentOpts = {}): VoiceIntentView {
       getState: globalVoiceStore.getState,
     };
   });
-
-  // (Re)create engine when options change, bind to global store
+  // Bind to global store & keep view in sync — adapter only (no engine creation here)
   useEffect(() => {
-    // Dispose any existing engine instance
-    engineRef.current?.dispose?.();
-    // Create engine bound to the shared global store
-    const engine = useWebSpeechEngine({ lang, interim, continuous });
-    engineRef.current = engine;
+    // Set engine configuration (consumed by whichever engine/provider is mounted elsewhere)
+    globalVoiceStore.dispatch({
+      type: "INT/SET_CONFIG",
+      payload: { lang, interim: !!interim, continuous: !!continuous },
+    });
 
     // Initialize view from the current global state
     setView((v) => ({
@@ -259,7 +256,9 @@ export function useVoiceIntents(opts: VoiceIntentOpts = {}): VoiceIntentView {
               activationResult,
               params: inferred.params,
             });
-            if (!continuous) engine.stop();
+            if (!continuous) {
+              globalVoiceStore.dispatch({ type: "REQ/STOP" });
+            }
           })
           .catch((err) => {
             track("ui.voice", {
@@ -274,24 +273,23 @@ export function useVoiceIntents(opts: VoiceIntentOpts = {}): VoiceIntentView {
 
     return () => {
       unsub();
-      engine.dispose();
-      engineRef.current = null;
     };
   }, [lang, interim, continuous, origin, redact, activate]);
 
-  // Auto-start on mount (if supported)
+  // Auto-start on mount (if supported) — adapter sends requests; engine elsewhere handles them
   useEffect(() => {
-    const engine = engineRef.current;
-    if (!engine) return;
     track("ui.voice", { phase: "start", origin, lang });
     prevFinalRef.current = globalVoiceStore.getState().transcript || "";
     // Generate a fresh local session id when we explicitly start
     localSessionRef.current.sessionId = crypto.randomUUID();
-    engine.start();
+    globalVoiceStore.dispatch({
+      type: "REQ/START",
+      payload: { lang, interim: !!interim, continuous: !!continuous },
+    });
     return () => {
-      engineRef.current?.stop();
+      globalVoiceStore.dispatch({ type: "REQ/STOP" });
     };
-  }, [origin, lang]);
+  }, [origin, lang, interim, continuous]);
 
   return view;
 }

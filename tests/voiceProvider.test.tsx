@@ -42,7 +42,7 @@ describe("VoiceProvider", () => {
   it("throws if useVoiceContext() is called outside provider", () => {
     // expect the render to throw synchronously
     expect(() => render(<ThrowOutsideProbe />)).toThrowError(
-      /useVoiceContext must be used within a <VoiceProvider>/
+      /useVoiceContext must be used within a <VoiceProvider>./
     );
   });
 

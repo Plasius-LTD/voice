@@ -99,7 +99,7 @@ function registerGlobalIntents(intents: RegisteredIntent[]): void {
   registerVoiceIntents("*", intents);
 }
 
-function getRegisteredIntentNames(origin?: string): string[] {
+export function getRegisteredIntentNames(origin?: string): string[] {
   const names = new Set<string>();
   if (origin && intentRegistry.get(origin))
     intentRegistry.get(origin)!.forEach((i) => names.add(i.name));

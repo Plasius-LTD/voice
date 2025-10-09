@@ -139,7 +139,6 @@ export function useVoiceControl(
       lang: engineConfig.lang ?? (globalStore.getState().lang || "en-GB"),
       interim: !!engineConfig.interim,
       continuous: !!engineConfig.continuous,
-      globalStore,
     });
 
   // --- Global input listeners (optional) --------------------------------------

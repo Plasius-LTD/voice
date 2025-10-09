@@ -47,8 +47,9 @@ export function useWebSpeechEngine(opts: {
 }): WebSpeechEngine {
   const gStore = opts.globalStore ?? defaultGlobal;
 
-  // Tiny engine-only store
-  const engineStore: Store<EngineState, EngineAction> = useMemo(() => {
+  // Tiny engine-only store (stable across renders)
+  const engineStoreRef = useRef<Store<EngineState, EngineAction> | null>(null);
+  if (!engineStoreRef.current) {
     const reducer = (s: EngineState, a: EngineAction): EngineState => {
       switch (a.type) {
         case "EVT/START":
@@ -73,13 +74,14 @@ export function useWebSpeechEngine(opts: {
           return s;
       }
     };
-    return createStore<EngineState, EngineAction>(reducer, {
+    engineStoreRef.current = createStore<EngineState, EngineAction>(reducer, {
       sessionId: null,
       startedAt: undefined,
       endedAt: undefined,
       lastError: undefined,
     });
-  }, []);
+  }
+  const engineStore = engineStoreRef.current;
 
   // Push option changes into the global store (no implicit start/stop)
   useEffect(() => {

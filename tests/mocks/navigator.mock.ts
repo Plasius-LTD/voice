@@ -62,6 +62,9 @@ export const getUserMediaMock = vi.fn(
 );
 
 export function _emitDeviceChange() {
+  ((globalThis as any)?.navigator.mediaDevices as any).dispatchEvent?.(
+    new Event("devicechange")
+  );
   for (const l of Array.from(deviceListeners)) l();
 }
 
@@ -80,7 +83,11 @@ export function _resetNavigatorMocks() {
   enumerateDevicesMock.mockClear();
   getUserMediaMock.mockClear();
   permissionsQueryMock.mockClear();
+  // Intentionally do NOT restore globalThis.navigator here.
+  // We keep the mock installed across tests for stability; use _uninstallNavigatorMocks() in afterAll if needed.
+}
 
+export function _uninstallNavigatorMocks() {
   if (originalNavigator) {
     Object.defineProperty(globalThis, "navigator", {
       configurable: true,
@@ -88,6 +95,7 @@ export function _resetNavigatorMocks() {
     });
     originalNavigator = null;
   }
+  deviceListeners.clear();
 }
 
 export function installNavigatorMocks() {

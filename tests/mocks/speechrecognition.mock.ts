@@ -1,6 +1,25 @@
 // tests/mocks/speechrecognition.mock.ts
 import { vi } from "vitest";
 
+// Stable, process-wide registries (persist across tests & re-imports)
+const SR_INSTANCES_SYM = Symbol.for("__sr_instances__");
+const SR_CONFIG_SYM = Symbol.for("__sr_config__");
+const g: any = globalThis as any;
+if (!g[SR_INSTANCES_SYM]) g[SR_INSTANCES_SYM] = [] as FakeSpeechRecognition[];
+
+
+type Cfg = {
+  autoEmitStart: boolean; // auto-call onstart on next microtask after start()
+  autoEmitEndOnStop: boolean; // auto-call onend on next microtask after stop()/abort()
+  throwIfDoubleStart: boolean; // mimic browsers throwing on start() when already started
+};
+const defaultCfg: Cfg = {
+  autoEmitStart: false,
+  autoEmitEndOnStop: false,
+  throwIfDoubleStart: false,
+};
+if (!g[SR_CONFIG_SYM]) g[SR_CONFIG_SYM] = { ...defaultCfg } as Cfg;
+
 /**
  * Minimal browser-like SR mock with lifecycle + state.
  * Defaults: manual control (tests call emitStart/emitEnd explicitly),
@@ -10,31 +29,11 @@ import { vi } from "vitest";
 type SRResult = { isFinal: boolean; 0: { transcript: string } };
 type SREventPayload = { results: SRResult[]; resultIndex?: number };
 
-type Cfg = {
-  autoEmitStart: boolean;       // auto-call onstart on next microtask after start()
-  autoEmitEndOnStop: boolean;   // auto-call onend on next microtask after stop()/abort()
-  throwIfDoubleStart: boolean;  // mimic browsers throwing on start() when already started
-};
-
-const defaultCfg: Cfg = {
-  autoEmitStart: false,
-  autoEmitEndOnStop: false,
-  throwIfDoubleStart: false,
-};
-
-// Single global registry to avoid duplicate-module graphs.
-const KEY = "__SR_INSTANCES__";
-const CFG_KEY = "__SR_CFG__";
-
 function getRegistry(): FakeSpeechRecognition[] {
-  const g = globalThis as any;
-  if (!g[KEY]) g[KEY] = [] as FakeSpeechRecognition[];
-  return g[KEY];
+  return (globalThis as any)[SR_INSTANCES_SYM] as FakeSpeechRecognition[];
 }
 function getCfg(): Cfg {
-  const g = globalThis as any;
-  if (!g[CFG_KEY]) g[CFG_KEY] = { ...defaultCfg };
-  return g[CFG_KEY];
+  return (globalThis as any)[SR_CONFIG_SYM] as Cfg;
 }
 
 export class FakeSpeechRecognition {
@@ -137,13 +136,26 @@ export function _setSRMockConfig(partial: Partial<Cfg>) {
 
 /** Install the constructor onto globalThis */
 export function installSpeechRecognitionMock() {
-  _clearSRInstances();
-  const Ctor = vi.fn(() => {
-    const inst = new FakeSpeechRecognition();
-    getRegistry().push(inst);
-    return inst as unknown as any;
-  });
+  // If a mock is already installed, keep using it (idempotent)
+  const existing =
+    (globalThis as any).SpeechRecognition ??
+    (globalThis as any).webkitSpeechRecognition;
+  if (typeof existing === "function" && (existing as any).__isSRMock) {
+    (globalThis as any).SpeechRecognition = existing;
+    (globalThis as any).webkitSpeechRecognition = existing;
+    return;
+  }
 
-  (globalThis as any).SpeechRecognition = Ctor;
-  (globalThis as any).webkitSpeechRecognition = Ctor;
+  class SRMock extends FakeSpeechRecognition {
+    static __isSRMock = true;
+    constructor() {
+      super();
+      getRegistry().push(this);
+    }
+  }
+  // mark for detection if code grabs the constructor directly
+  (SRMock as any).__isSRMock = true;
+
+  (globalThis as any).SpeechRecognition = SRMock as unknown as any;
+  (globalThis as any).webkitSpeechRecognition = SRMock as unknown as any;
 }

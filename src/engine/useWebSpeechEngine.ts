@@ -73,7 +73,7 @@ export type WebSpeechEngine = {
   start(): void;
   stop(): void;
   dispose(): void;
-
+  reset(): void;
   getLocalState(): EngineState;
   // convenience proxies reading from the global store
   getState(): GlobalVoiceState;
@@ -365,8 +365,12 @@ export function useWebSpeechEngine(opts: {
         const stuck = recRef.current;
         recRef.current = null;
         if (stuck) {
-          try { await stopAndWait(stuck as any); } catch (err) {
-            try { track("webspeech:stopAndWait-error", { msg: String(err) }); } catch {}
+          try {
+            await stopAndWait(stuck as any);
+          } catch (err) {
+            try {
+              track("webspeech:stopAndWait-error", { msg: String(err) });
+            } catch {}
           }
         }
 
@@ -379,8 +383,13 @@ export function useWebSpeechEngine(opts: {
             recRef.current = fresh;
             fresh.start();
           } catch (err2) {
-            try { track("webspeech:freshstart-error", { msg: String(err2) }); } catch {}
-            gStore.dispatch({ type: "EVT/ERROR", payload: { error: String(err2) } });
+            try {
+              track("webspeech:freshstart-error", { msg: String(err2) });
+            } catch {}
+            gStore.dispatch({
+              type: "EVT/ERROR",
+              payload: { error: String(err2) },
+            });
           }
         }
       }
@@ -490,6 +499,11 @@ export function useWebSpeechEngine(opts: {
         A.reqStop();
         disposedRef.current = true;
         const current = recRef.current;
+        try {
+          track("webspeech:dispose", {
+            sessionId: (current as any).__sessionId,
+          });
+        } catch {}
         recRef.current = null;
         A.resetLocal();
         for (const fn of cleanupsRef.current.splice(0)) {
@@ -511,6 +525,7 @@ export function useWebSpeechEngine(opts: {
       },
       reset() {
         disposedRef.current = false;
+        track("webspeech:reset");
       },
       getLocalState: engineStore.getState,
       getState: gStore.getState,

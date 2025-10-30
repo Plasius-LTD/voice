@@ -565,7 +565,12 @@ describe("useWebSpeechEngine", () => {
       });
 
     // Trigger a start request — engine will create an instance and call start(), which will throw once
-    await act(async () => dispatch({ type: "REQ/START" }));
+    await act(async () =>
+      dispatch({
+        type: "REQ/START",
+        payload: { continuous: true, lang: "en-GB", interim: true },
+      })
+    );
 
     // stopAndWait should be called to clean the stuck recognizer
     await act(async () => {});

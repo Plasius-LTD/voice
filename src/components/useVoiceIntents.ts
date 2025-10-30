@@ -45,6 +45,8 @@ export type VoiceIntentView = {
   subscribe?: GlobalVoiceStore["subscribe"];
   subscribeToKey?: GlobalVoiceStore["subscribeToKey"];
   getState?: () => GlobalVoiceState;
+  start: () => void;
+  stop: () => void;
 };
 
 // ──────────────────────────────────────────────────────────────────────────────
@@ -143,7 +145,18 @@ export function useVoiceIntents(opts: VoiceIntentOpts = {}): VoiceIntentView {
       subscribe: globalVoiceStore.subscribe,
       subscribeToKey: globalVoiceStore.subscribeToKey,
       getState: globalVoiceStore.getState,
-    };
+      start: () => {
+        globalVoiceStore.dispatch({
+          type: "REQ/START",
+          payload: { lang, interim: !!interim, continuous: !!continuous },
+        });
+      },
+      stop: () => {
+        globalVoiceStore.dispatch({
+          type: "REQ/STOP",
+        });
+      }
+    }
   });
   // Bind to global store & keep view in sync — adapter only (no engine creation here)
   useEffect(() => {
@@ -165,6 +178,17 @@ export function useVoiceIntents(opts: VoiceIntentOpts = {}): VoiceIntentView {
       subscribe: globalVoiceStore.subscribe,
       subscribeToKey: globalVoiceStore.subscribeToKey,
       getState: globalVoiceStore.getState,
+      start: () => {
+        globalVoiceStore.dispatch({
+          type: "REQ/START",
+          payload: { lang, interim: !!interim, continuous: !!continuous },
+        });
+      },
+      stop: () => {
+        globalVoiceStore.dispatch({
+          type: "REQ/STOP",
+        });
+      }
     }));
 
     // Subscribe to global store updates to keep view in sync
@@ -181,6 +205,17 @@ export function useVoiceIntents(opts: VoiceIntentOpts = {}): VoiceIntentView {
         subscribe: globalVoiceStore.subscribe,
         subscribeToKey: globalVoiceStore.subscribeToKey,
         getState: globalVoiceStore.getState,
+        start: () => {
+          globalVoiceStore.dispatch({
+            type: "REQ/START",
+            payload: { lang, interim: !!interim, continuous: !!continuous },
+          });
+        },
+        stop: () => {
+          globalVoiceStore.dispatch({
+            type: "REQ/STOP",
+          });
+        }
       }));
 
       // Detect listening start/stop transitions to manage a local session id

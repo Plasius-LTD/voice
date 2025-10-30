@@ -25,6 +25,7 @@ The format is based on **[Keep a Changelog](https://keepachangelog.com/en/1.1.0/
 - **Added**
   - Reset for useWebSpeechEngine added
   - track add for dispose events
+  - Start/Stop added for useVoiceIntents, removing requirements for useWebSpeechRecognition passthrough.
 
 - **Changed**
   - (placeholder)

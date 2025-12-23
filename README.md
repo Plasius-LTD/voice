@@ -26,6 +26,40 @@ npm install @plasius/voice
 
 ## Usage Example
 
+### One-line hook (intents + controls)
+
+If you prefer a single hook, `useVoice` bundles intents and controls and leaves starting/stopping explicit (no auto-start by default):
+
+```ts
+import { useEffect } from "react";
+import { useVoice } from "@plasius/voice";
+
+export function VoicePanel() {
+  const { intents, control, start, stop } = useVoice({
+    intents: { origin: "App" }, // set autoStart: true to opt into immediate listening
+    control: { enableGlobalKeyboard: false },
+  });
+
+  useEffect(() => {
+    // Start on mount; callers can also bind start/stop to UI buttons.
+    start();
+    return () => stop();
+  }, [start, stop]);
+
+  return (
+    <div>
+      <button onClick={() => control.setMuted(!control.pttButtonProps["aria-pressed"])}>
+        Toggle mute
+      </button>
+      <button {...control.pttButtonProps}>Push to Talk</button>
+      <div>Transcript: {intents.transcript}</div>
+    </div>
+  );
+}
+```
+
+### Using separate hooks
+
 ```ts
 import { useEffect, useState } from "react";
 import { VoiceProvider, useVoiceControl, useVoiceIntents } from "@plasius/voice";
@@ -75,6 +109,7 @@ function VoiceControls() {
 function VoiceTranscript() {
   const { transcript, partial, error, subscribeToKey, getState } = useVoiceIntents({
     origin: "Transcript",
+    autoStart: true,
   });
   const [listening, setListening] = useState(
     () => getState?.().listening ?? false

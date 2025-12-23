@@ -95,6 +95,30 @@ describe("useVoiceIntents", () => {
     result.current.unregisterVoiceIntents("page");
     unmount();
   });
+
+  it("does not auto-start by default", async () => {
+    const { useVoiceIntents, store } = await loadModules();
+
+    renderHook(() => useVoiceIntents({ lang: "en-US" }));
+
+    expect(store.getState().wantListening).toBe(false);
+    expect(trackSpy).not.toHaveBeenCalledWith(
+      "ui.voice",
+      expect.objectContaining({ phase: "start" })
+    );
+  });
+
+  it("auto-starts when enabled", async () => {
+    const { useVoiceIntents, store } = await loadModules();
+
+    renderHook(() => useVoiceIntents({ origin: "page", autoStart: true }));
+
+    await waitFor(() => expect(store.getState().wantListening).toBe(true));
+    expect(trackSpy).toHaveBeenCalledWith(
+      "ui.voice",
+      expect.objectContaining({ phase: "start", origin: "page" })
+    );
+  });
 });
 
 describe("VoiceIntents component", () => {

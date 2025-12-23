@@ -11,9 +11,11 @@ The format is based on **[Keep a Changelog](https://keepachangelog.com/en/1.1.0/
 - **Added**
   - Expanded README with end-to-end usage and intent registration examples.
   - Broader test coverage for voice controls, intents, adapter utilities, and lifecycle helpers; coverage ignores temp artifacts.
+  - New `useVoice` convenience hook that composes intents and controls with shared `start`/`stop` helpers.
 
 - **Changed**
   - `useVoiceControl` now subscribes to PTT state with `useSyncExternalStore` so button props stay in sync without extra renders.
+  - `useVoiceIntents` now defaults `autoStart` to `false` to avoid unexpected microphone activation; opt in with `autoStart: true`.
 
 - **Fixed**
   - `pttButtonProps["aria-pressed"]` now reflects the latest store state, avoiding stale pressed indicators.

@@ -1,5 +1,5 @@
 // useVoice.ts — slim adapter: initialize engine, expose status, and process intents
-import { useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { track } from "@plasius/nfr";
 import {
   globalVoiceStore,
@@ -16,6 +16,7 @@ export type VoiceIntentOpts = {
   interim?: boolean; // partial transcripts
   continuous?: boolean; // keep listening until stopped (optional)
   redact?: (t: string) => string; // optional PII redaction
+  autoStart?: boolean; // start recognition on mount; default false
   activate?: (
     intent: string,
     meta: {
@@ -119,6 +120,7 @@ export function useVoiceIntents(opts: VoiceIntentOpts = {}): VoiceIntentView {
     interim = true,
     continuous = false,
     redact,
+    autoStart = false,
     activate,
   } = opts;
   
@@ -127,6 +129,23 @@ export function useVoiceIntents(opts: VoiceIntentOpts = {}): VoiceIntentView {
     sessionId: null,
     lastListening: false,
   });
+
+  const startVoice = useCallback(() => {
+    track("ui.voice", { phase: "start", origin, lang });
+    prevFinalRef.current = globalVoiceStore.getState().transcript || "";
+    localSessionRef.current.sessionId = crypto.randomUUID();
+    localSessionRef.current.lastListening = false;
+    globalVoiceStore.dispatch({
+      type: "REQ/START",
+      payload: { lang, interim: !!interim, continuous: !!continuous },
+    });
+  }, [origin, lang, interim, continuous]);
+
+  const stopVoice = useCallback(() => {
+    globalVoiceStore.dispatch({
+      type: "REQ/STOP",
+    });
+  }, []);
 
   // Initial view state from global store
   const [view, setView] = useState<VoiceIntentView>(() => {
@@ -145,17 +164,8 @@ export function useVoiceIntents(opts: VoiceIntentOpts = {}): VoiceIntentView {
       subscribe: globalVoiceStore.subscribe,
       subscribeToKey: globalVoiceStore.subscribeToKey,
       getState: globalVoiceStore.getState,
-      start: () => {
-        globalVoiceStore.dispatch({
-          type: "REQ/START",
-          payload: { lang, interim: !!interim, continuous: !!continuous },
-        });
-      },
-      stop: () => {
-        globalVoiceStore.dispatch({
-          type: "REQ/STOP",
-        });
-      }
+      start: startVoice,
+      stop: stopVoice,
     }
   });
   // Bind to global store & keep view in sync — adapter only (no engine creation here)
@@ -178,17 +188,8 @@ export function useVoiceIntents(opts: VoiceIntentOpts = {}): VoiceIntentView {
       subscribe: globalVoiceStore.subscribe,
       subscribeToKey: globalVoiceStore.subscribeToKey,
       getState: globalVoiceStore.getState,
-      start: () => {
-        globalVoiceStore.dispatch({
-          type: "REQ/START",
-          payload: { lang, interim: !!interim, continuous: !!continuous },
-        });
-      },
-      stop: () => {
-        globalVoiceStore.dispatch({
-          type: "REQ/STOP",
-        });
-      }
+      start: startVoice,
+      stop: stopVoice,
     }));
 
     // Subscribe to global store updates to keep view in sync
@@ -205,17 +206,8 @@ export function useVoiceIntents(opts: VoiceIntentOpts = {}): VoiceIntentView {
         subscribe: globalVoiceStore.subscribe,
         subscribeToKey: globalVoiceStore.subscribeToKey,
         getState: globalVoiceStore.getState,
-        start: () => {
-          globalVoiceStore.dispatch({
-            type: "REQ/START",
-            payload: { lang, interim: !!interim, continuous: !!continuous },
-          });
-        },
-        stop: () => {
-          globalVoiceStore.dispatch({
-            type: "REQ/STOP",
-          });
-        }
+        start: startVoice,
+        stop: stopVoice,
       }));
 
       // Detect listening start/stop transitions to manage a local session id
@@ -309,22 +301,14 @@ export function useVoiceIntents(opts: VoiceIntentOpts = {}): VoiceIntentView {
     return () => {
       unsub();
     };
-  }, [lang, interim, continuous, origin, redact, activate]);
+  }, [lang, interim, continuous, origin, redact, activate, startVoice, stopVoice]);
 
   // Auto-start on mount (if supported) — adapter sends requests; engine elsewhere handles them
   useEffect(() => {
-    track("ui.voice", { phase: "start", origin, lang });
-    prevFinalRef.current = globalVoiceStore.getState().transcript || "";
-    // Generate a fresh local session id when we explicitly start
-    localSessionRef.current.sessionId = crypto.randomUUID();
-    globalVoiceStore.dispatch({
-      type: "REQ/START",
-      payload: { lang, interim: !!interim, continuous: !!continuous },
-    });
-    return () => {
-      globalVoiceStore.dispatch({ type: "REQ/STOP" });
-    };
-  }, [origin, lang, interim, continuous]);
+    if (!autoStart) return;
+    startVoice();
+    return () => stopVoice();
+  }, [autoStart, startVoice, stopVoice]);
 
   return view;
 }

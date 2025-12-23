@@ -6,6 +6,7 @@ export {
   useVoiceContext,
   WithVoice,
 } from "./components/voiceProvider.js";
+export { useVoice, type UseVoiceOptions, type UseVoiceResult } from "./components/useVoice.js";
 export { useVoiceIntents } from "./components/useVoiceIntents.js";
 export { useVoiceControl } from "./components/useVoiceControl.js";
 export {

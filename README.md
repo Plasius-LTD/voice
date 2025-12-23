@@ -39,17 +39,28 @@ export function VoicePanel() {
     intents: { origin: "App" }, // set autoStart: true to opt into immediate listening
     control: { enableGlobalKeyboard: false },
   });
+  const [muted, setMuted] = useState(
+    () => intents.getState?.().muted ?? false
+  );
+
+  useEffect(() => intents.subscribeToKey?.("muted", setMuted), [intents]);
 
   useEffect(() => {
-    // Start on mount; callers can also bind start/stop to UI buttons.
+    // Explicit start; hook defaults to autoStart: false
     start();
     return () => stop();
   }, [start, stop]);
 
   return (
     <div>
-      <button onClick={() => control.setMuted(!control.pttButtonProps["aria-pressed"])}>
-        Toggle mute
+      <button
+        onClick={() => {
+          const next = !muted;
+          setMuted(next);
+          control.setMuted(next);
+        }}
+      >
+        {muted ? "Unmute" : "Mute"}
       </button>
       <button {...control.pttButtonProps}>Push to Talk</button>
       <div>Transcript: {intents.transcript}</div>

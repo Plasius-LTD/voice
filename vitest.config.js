@@ -14,6 +14,7 @@ export default defineConfig({
       exclude: [
         "src/types/**/*.d.ts",
         "tests/**",
+        "temp/**",
         "dist/**",
         "**/*.config.{js,ts}",
         "**/.eslintrc.{js,cjs}",

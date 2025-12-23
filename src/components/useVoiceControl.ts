@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef } from "react";
+import { useEffect, useMemo, useRef, useSyncExternalStore } from "react";
 import { track } from "@plasius/nfr";
 import type { GlobalVoiceStore } from "../stores/global.store.js";
 import { globalVoiceStore as defaultGlobalVoiceStore } from "../stores/global.store.js";
@@ -11,7 +11,7 @@ import { useWebSpeechEngine } from "../engine/useWebSpeechEngine.js";
 export type UseVoiceControlOptions = {
   /**
    * Keyboard keys that trigger PTT. Values are KeyboardEvent.code entries
-   * (e.g. "Space", "KeyV"). Defaults to ["Space"].
+   * (e.g. "Space", "KeyV"). Defaults to ["ControlLeft", "Space", "ControlRight"].
    */
   pttKeyCodes?: string[]; // KeyboardEvent.code
   /**
@@ -361,16 +361,20 @@ export function useVoiceControl(
     }
   };
 
+  const pttActive = useSyncExternalStore(
+    globalStore.subscribe,
+    () => globalStore.getState().pttActive
+  );
+
   const pttButtonProps = useMemo(
     () => ({
       onMouseDown: () => pttButton("press", "mouse"),
       onMouseUp: () => pttButton("release", "mouse"),
       onTouchStart: () => pttButton("press", "touch"),
       onTouchEnd: () => pttButton("release", "touch"),
-      "aria-pressed": globalStore.getState().pttActive,
+      "aria-pressed": pttActive,
     }),
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-    [globalStore.getState().pttActive]
+    [pttActive, pttButton]
   );
 
   const setMuted = (value: boolean) => {

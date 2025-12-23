@@ -43,6 +43,19 @@ describe("buildDefaultAdapter", () => {
     expect(voice.volume).toBe(0.5);
   });
 
+  it("uses mute/unmute fallbacks when setMuted is absent", () => {
+    const mute = vi.fn();
+    const unmute = vi.fn();
+    const voice = mk({ mute, unmute });
+
+    const a = buildDefaultAdapter(voice);
+    a.setMuted(true);
+    a.setMuted(false);
+
+    expect(mute).toHaveBeenCalledTimes(1);
+    expect(unmute).toHaveBeenCalledTimes(1);
+  });
+
   it("handles missing members with safe defaults", () => {
     const voice = mk({});
     const a = buildDefaultAdapter(voice);

@@ -27,30 +27,60 @@ npm install @plasius/voice
 ## Usage Example
 
 ```ts
-import { VoiceProvider, useVoice, useVoiceControls } from "@plasius/voice";
+import { useEffect, useState } from "react";
+import { VoiceProvider, useVoiceControl, useVoiceIntents } from "@plasius/voice";
 
 function VoiceControls() {
-  const { muted, volume, toggleMute, setVolume, listening, pushToTalk } = useVoiceControls();
+  const { subscribeToKey, getState } = useVoiceIntents();
+  const { setMuted, setVolume, pttButtonProps } = useVoiceControl();
+
+  const [muted, setMutedState] = useState(() => getState?.().muted ?? false);
+  const [volume, setVolumeState] = useState(() => getState?.().volume ?? 1);
+  const [listening, setListening] = useState(
+    () => getState?.().listening ?? false
+  );
+
+  useEffect(() => {
+    const unsubMuted = subscribeToKey?.("muted", setMutedState);
+    const unsubVolume = subscribeToKey?.("volume", setVolumeState);
+    const unsubListening = subscribeToKey?.("listening", setListening);
+    return () => {
+      unsubMuted?.();
+      unsubVolume?.();
+      unsubListening?.();
+    };
+  }, [subscribeToKey]);
 
   return (
     <div>
-      <button onClick={toggleMute}>{muted ? "Unmute" : "Mute"}</button>
+      <button onClick={() => setMuted(!muted)}>{muted ? "Unmute" : "Mute"}</button>
       <input
         type="range"
         min="0"
         max="1"
         step="0.1"
         value={volume}
-        onChange={(e) => setVolume(parseFloat(e.target.value))}
+        onChange={(e) => {
+          const v = parseFloat(e.target.value);
+          setVolumeState(v);
+          setVolume(v);
+        }}
       />
-      <button {...pushToTalk}>Push to Talk</button>
+      <button {...pttButtonProps}>Push to Talk</button>
       <div>Listening: {listening ? "Yes" : "No"}</div>
     </div>
   );
 }
 
 function VoiceTranscript() {
-  const { listening, transcript, partial, error } = useVoice({ origin: "Transcript" });
+  const { transcript, partial, error, subscribeToKey, getState } = useVoiceIntents({
+    origin: "Transcript",
+  });
+  const [listening, setListening] = useState(
+    () => getState?.().listening ?? false
+  );
+
+  useEffect(() => subscribeToKey?.("listening", setListening), [subscribeToKey]);
 
   return (
     <div>

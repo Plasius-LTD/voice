@@ -9,13 +9,14 @@ The format is based on **[Keep a Changelog](https://keepachangelog.com/en/1.1.0/
 ## [Unreleased]
 
 - **Added**
-  - (placeholder)
+  - Expanded README with end-to-end usage and intent registration examples.
+  - Broader test coverage for voice controls, intents, adapter utilities, and lifecycle helpers; coverage ignores temp artifacts.
 
 - **Changed**
-  - (placeholder)
+  - `useVoiceControl` now subscribes to PTT state with `useSyncExternalStore` so button props stay in sync without extra renders.
 
 - **Fixed**
-  - (placeholder)
+  - `pttButtonProps["aria-pressed"]` now reflects the latest store state, avoiding stale pressed indicators.
 
 - **Security**
   - (placeholder)
@@ -23,7 +24,7 @@ The format is based on **[Keep a Changelog](https://keepachangelog.com/en/1.1.0/
 ## [1.1.0-beta.10] - 2025-10-30
 
 - **Added**
-  - (placeholder)
+  - `useVoiceIntents` exposes `start`/`stop` controls and dispatches configuration directly to the global store, removing the need for a `useWebSpeechRecognition` passthrough.
 
 - **Changed**
   - (placeholder)
@@ -39,7 +40,6 @@ The format is based on **[Keep a Changelog](https://keepachangelog.com/en/1.1.0/
 - **Added**
   - Reset for useWebSpeechEngine added
   - track add for dispose events
-  - Start/Stop added for useVoiceIntents, removing requirements for useWebSpeechRecognition passthrough.
 
 - **Changed**
   - (placeholder)

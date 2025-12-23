@@ -2,7 +2,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { track } from "@plasius/nfr";
 import {
-  globalVoiceStore,
+  globalVoiceStore as defaultGlobalVoiceStore,
   type GlobalVoiceState,
   type GlobalVoiceStore,
 } from "../stores/global.store.js";
@@ -17,6 +17,7 @@ export type VoiceIntentOpts = {
   continuous?: boolean; // keep listening until stopped (optional)
   redact?: (t: string) => string; // optional PII redaction
   autoStart?: boolean; // start recognition on mount; default false
+  globalStore?: GlobalVoiceStore; // override store (for composition/testing)
   activate?: (
     intent: string,
     meta: {
@@ -123,6 +124,24 @@ export function useVoiceIntents(opts: VoiceIntentOpts = {}): VoiceIntentView {
     autoStart = false,
     activate,
   } = opts;
+  const store = opts.globalStore ?? defaultGlobalVoiceStore;
+  const safeTrack = (...args: Parameters<typeof track>) => {
+    try {
+      track(...args);
+    } catch {
+      // ignore telemetry failures
+    }
+  };
+  const ensureSessionId = (): string | null => {
+    if (typeof crypto === "undefined" || typeof crypto.randomUUID !== "function") {
+      const message =
+        "Voice intents require crypto.randomUUID; this browser does not support it.";
+      store.dispatch({ type: "EVT/ERROR", payload: { error: message } });
+      safeTrack("ui.voice", { phase: "error", origin, error: message });
+      return null;
+    }
+    return crypto.randomUUID();
+  };
   
   const prevFinalRef = useRef<string>("");
   const localSessionRef = useRef<{ sessionId: string | null; lastListening: boolean }>({
@@ -131,25 +150,27 @@ export function useVoiceIntents(opts: VoiceIntentOpts = {}): VoiceIntentView {
   });
 
   const startVoice = useCallback(() => {
-    track("ui.voice", { phase: "start", origin, lang });
-    prevFinalRef.current = globalVoiceStore.getState().transcript || "";
-    localSessionRef.current.sessionId = crypto.randomUUID();
+    const sid = ensureSessionId();
+    if (!sid) return;
+    safeTrack("ui.voice", { phase: "start", origin, lang });
+    prevFinalRef.current = store.getState().transcript || "";
+    localSessionRef.current.sessionId = sid;
     localSessionRef.current.lastListening = false;
-    globalVoiceStore.dispatch({
+    store.dispatch({
       type: "REQ/START",
       payload: { lang, interim: !!interim, continuous: !!continuous },
     });
-  }, [origin, lang, interim, continuous]);
+  }, [ensureSessionId, safeTrack, store, origin, lang, interim, continuous]);
 
   const stopVoice = useCallback(() => {
-    globalVoiceStore.dispatch({
+    store.dispatch({
       type: "REQ/STOP",
     });
-  }, []);
+  }, [store]);
 
   // Initial view state from global store
   const [view, setView] = useState<VoiceIntentView>(() => {
-    const s0 = globalVoiceStore.getState();
+    const s0 = store.getState();
     return {
       permission: s0.permission,
       sessionId: localSessionRef.current?.sessionId ?? null,
@@ -161,9 +182,9 @@ export function useVoiceIntents(opts: VoiceIntentOpts = {}): VoiceIntentView {
       unregisterVoiceIntents,
       registerGlobalIntents,
       getRegisteredIntentNames,
-      subscribe: globalVoiceStore.subscribe,
-      subscribeToKey: globalVoiceStore.subscribeToKey,
-      getState: globalVoiceStore.getState,
+      subscribe: store.subscribe,
+      subscribeToKey: store.subscribeToKey,
+      getState: store.getState,
       start: startVoice,
       stop: stopVoice,
     }
@@ -171,7 +192,7 @@ export function useVoiceIntents(opts: VoiceIntentOpts = {}): VoiceIntentView {
   // Bind to global store & keep view in sync — adapter only (no engine creation here)
   useEffect(() => {
     // Set engine configuration (consumed by whichever engine/provider is mounted elsewhere)
-    globalVoiceStore.dispatch({
+    store.dispatch({
       type: "INT/SET_CONFIG",
       payload: { lang, interim: !!interim, continuous: !!continuous },
     });
@@ -179,22 +200,22 @@ export function useVoiceIntents(opts: VoiceIntentOpts = {}): VoiceIntentView {
     // Initialize view from the current global state
     setView((v) => ({
       ...v,
-      permission: globalVoiceStore.getState().permission,
+      permission: store.getState().permission,
       sessionId: localSessionRef.current.sessionId,
       lang,
-      partial: globalVoiceStore.getState().partial,
-      transcript: globalVoiceStore.getState().transcript,
-      error: globalVoiceStore.getState().lastError,
-      subscribe: globalVoiceStore.subscribe,
-      subscribeToKey: globalVoiceStore.subscribeToKey,
-      getState: globalVoiceStore.getState,
+      partial: store.getState().partial,
+      transcript: store.getState().transcript,
+      error: store.getState().lastError,
+      subscribe: store.subscribe,
+      subscribeToKey: store.subscribeToKey,
+      getState: store.getState,
       start: startVoice,
       stop: stopVoice,
     }));
 
     // Subscribe to global store updates to keep view in sync
-    const unsub = globalVoiceStore.subscribe(() => {
-      const s = globalVoiceStore.getState();
+    const unsub = store.subscribe(() => {
+      const s = store.getState();
       setView((v) => ({
         ...v,
         permission: s.permission,
@@ -203,9 +224,9 @@ export function useVoiceIntents(opts: VoiceIntentOpts = {}): VoiceIntentView {
         partial: s.partial,
         transcript: s.transcript,
         error: s.lastError,
-        subscribe: globalVoiceStore.subscribe,
-        subscribeToKey: globalVoiceStore.subscribeToKey,
-        getState: globalVoiceStore.getState,
+        subscribe: store.subscribe,
+        subscribeToKey: store.subscribeToKey,
+        getState: store.getState,
         start: startVoice,
         stop: stopVoice,
       }));
@@ -214,7 +235,9 @@ export function useVoiceIntents(opts: VoiceIntentOpts = {}): VoiceIntentView {
       const listening = s.listening === true;
       if (listening && !localSessionRef.current.lastListening) {
         // transitioned to listening → start a new local session
-        localSessionRef.current.sessionId = crypto.randomUUID();
+        const sid = ensureSessionId();
+        if (!sid) return;
+        localSessionRef.current.sessionId = sid;
       }
       if (!listening && localSessionRef.current.lastListening) {
         // transitioned to not listening → close session
@@ -227,13 +250,13 @@ export function useVoiceIntents(opts: VoiceIntentOpts = {}): VoiceIntentView {
         prevFinalRef.current = s.transcript;
         const text = redact ? redact(s.transcript) : s.transcript;
         const inferred = inferIntent(text, origin);
-        track("ui.voice", {
+        safeTrack("ui.voice", {
           phase: "final",
           origin,
           sessionId: localSessionRef.current.sessionId,
           transcript: text,
         });
-        track("ui.voice", {
+        safeTrack("ui.voice", {
           phase: "intent",
           origin,
           sessionId: localSessionRef.current.sessionId,
@@ -275,7 +298,7 @@ export function useVoiceIntents(opts: VoiceIntentOpts = {}): VoiceIntentView {
           .then((res) => {
             const activationResult =
               res === "no-match" || res === false ? "no-match" : "success";
-            track("ui.voice", {
+            safeTrack("ui.voice", {
               phase: "activate",
               origin,
               sessionId: localSessionRef.current.sessionId,
@@ -284,11 +307,11 @@ export function useVoiceIntents(opts: VoiceIntentOpts = {}): VoiceIntentView {
               params: inferred.params,
             });
             if (!continuous) {
-              globalVoiceStore.dispatch({ type: "REQ/STOP" });
+              store.dispatch({ type: "REQ/STOP" });
             }
           })
           .catch((err) => {
-            track("ui.voice", {
+            safeTrack("ui.voice", {
               phase: "error",
               origin,
               sessionId: localSessionRef.current.sessionId,
@@ -301,7 +324,7 @@ export function useVoiceIntents(opts: VoiceIntentOpts = {}): VoiceIntentView {
     return () => {
       unsub();
     };
-  }, [lang, interim, continuous, origin, redact, activate, startVoice, stopVoice]);
+  }, [lang, interim, continuous, origin, redact, activate, startVoice, stopVoice, store, ensureSessionId, safeTrack]);
 
   // Auto-start on mount (if supported) — adapter sends requests; engine elsewhere handles them
   useEffect(() => {

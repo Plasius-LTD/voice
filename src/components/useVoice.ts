@@ -9,6 +9,10 @@ import {
   type UseVoiceControlOptions,
   type VoiceControlAPI,
 } from "./useVoiceControl.js";
+import {
+  globalVoiceStore as defaultGlobalVoiceStore,
+  type GlobalVoiceStore,
+} from "../stores/global.store.js";
 
 export type UseVoiceOptions = {
   intents?: VoiceIntentOpts;
@@ -27,8 +31,13 @@ export type UseVoiceResult = {
  * Returns both APIs plus top-level start/stop helpers.
  */
 export function useVoice(opts: UseVoiceOptions = {}): UseVoiceResult {
-  const intents = useVoiceIntents(opts.intents);
-  const control = useVoiceControl(opts.control);
+  const sharedStore: GlobalVoiceStore =
+    opts.control?.globalStore ??
+    opts.intents?.globalStore ??
+    defaultGlobalVoiceStore;
+
+  const intents = useVoiceIntents({ ...opts.intents, globalStore: sharedStore });
+  const control = useVoiceControl({ ...opts.control, globalStore: sharedStore });
 
   return useMemo(
     () => ({

@@ -31,7 +31,7 @@ npm install @plasius/voice
 If you prefer a single hook, `useVoice` bundles intents and controls and leaves starting/stopping explicit (no auto-start by default):
 
 ```ts
-import { useEffect } from "react";
+import { useEffect, useState } from "react";
 import { useVoice } from "@plasius/voice";
 
 export function VoicePanel() {

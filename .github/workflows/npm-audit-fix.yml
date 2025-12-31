@@ -1,0 +1,44 @@
+name: Monthly npm audit fix
+
+on:
+  schedule:
+    # 03:00 UTC on the 1st of each month
+    - cron: "0 3 1 * *"
+  workflow_dispatch:
+
+permissions:
+  contents: write
+  pull-requests: write
+
+jobs:
+  audit-fix:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Use Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version-file: ".nvmrc"
+          cache: "npm"
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Apply npm audit fix
+        run: npm audit fix --package-lock-only
+
+      - name: Build
+        run: npm run build --if-present
+
+      - name: Create pull request
+        uses: peter-evans/create-pull-request@v6
+        with:
+          commit-message: "chore: monthly npm audit fix"
+          title: "chore: monthly npm audit fix"
+          body: |
+            Automated `npm audit fix --package-lock-only` run.
+            Please review dependency changes and adjust if a forced upgrade is needed.
+          branch: chore/npm-audit-fix
+          delete-branch: true

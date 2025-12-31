@@ -16,7 +16,7 @@ describe("potential issues", () => {
     const injectedStore = storeModule.createGlobalVoiceStore();
     const { useVoice } = await import("../src/components/useVoice.js");
 
-    const { result } = renderHook(() =>
+    const { result, unmount } = renderHook(() =>
       useVoice({
         intents: { origin: "issue", globalStore: injectedStore },
         control: {
@@ -28,9 +28,12 @@ describe("potential issues", () => {
       })
     );
 
-    act(() => result.current.start());
-
-    expect(injectedStore.getState().wantListening).toBe(true);
+    try {
+      act(() => result.current.start());
+      expect(injectedStore.getState().wantListening).toBe(true);
+    } finally {
+      unmount();
+    }
   });
 
   it("useVoiceIntents does not crash if telemetry tracking throws", async () => {
@@ -40,16 +43,21 @@ describe("potential issues", () => {
       },
     }));
 
-    const { useVoiceIntents } = await import("../src/components/useVoiceIntents.js");
+    const { useVoiceIntents } = await import(
+      "../src/components/useVoiceIntents.js"
+    );
 
-    expect(() =>
-      renderHook(() =>
-        useVoiceIntents({
-          origin: "issue-telemetry",
-          autoStart: true,
-        })
-      )
-    ).not.toThrow();
+    const { unmount } = renderHook(() =>
+      useVoiceIntents({
+        origin: "issue-telemetry",
+        autoStart: true,
+      })
+    );
+    try {
+      // if the hook were to throw, the test would already fail; we just ensure cleanup
+    } finally {
+      unmount();
+    }
   });
 
   it("useVoiceIntents flags error if crypto.randomUUID is unavailable", async () => {
@@ -57,22 +65,31 @@ describe("potential issues", () => {
       track: vi.fn(),
     }));
 
-    // @ts-expect-error simulate missing crypto
-    const originalCrypto = globalThis.crypto;
-    // @ts-expect-error simulate missing crypto
-    globalThis.crypto = undefined;
+    // Simulate missing crypto.randomUUID (jsdom defines crypto with a getter-only property)
+    const originalDesc = Object.getOwnPropertyDescriptor(globalThis, "crypto");
+    Object.defineProperty(globalThis, "crypto", {
+      configurable: true,
+      enumerable: true,
+      value: undefined,
+      writable: true,
+    });
 
-    const { useVoiceIntents } = await import("../src/components/useVoiceIntents.js");
+    const { useVoiceIntents } = await import(
+      "../src/components/useVoiceIntents.js"
+    );
 
-    const { result } = renderHook(() =>
+    const { result, unmount } = renderHook(() =>
       useVoiceIntents({
         origin: "issue-crypto",
         autoStart: true,
       })
     );
-    expect(result.current.error).toMatch(/crypto\.randomUUID/i);
-
-    // @ts-expect-error restore crypto
-    globalThis.crypto = originalCrypto;
+    try {
+      expect(result.current.error).toMatch(/crypto\.randomUUID/i);
+    } finally {
+      if (originalDesc)
+        Object.defineProperty(globalThis, "crypto", originalDesc);
+      unmount();
+    }
   });
 });

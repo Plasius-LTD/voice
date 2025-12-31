@@ -111,6 +111,11 @@ export function getRegisteredIntentNames(origin?: string): string[] {
   return Array.from(names);
 }
 
+// Test-only helper to reset registry between runs to avoid leaked handlers in jsdom/Vitest.
+export function __clearIntentRegistryForTests() {
+  intentRegistry.clear();
+}
+
 // ──────────────────────────────────────────────────────────────────────────────
 // Slim hook: wires engine ↔ intents, exposes engine status
 // ──────────────────────────────────────────────────────────────────────────────
@@ -125,14 +130,14 @@ export function useVoiceIntents(opts: VoiceIntentOpts = {}): VoiceIntentView {
     activate,
   } = opts;
   const store = opts.globalStore ?? defaultGlobalVoiceStore;
-  const safeTrack = (...args: Parameters<typeof track>) => {
+  const safeTrack = useCallback((...args: Parameters<typeof track>) => {
     try {
       track(...args);
     } catch {
       // ignore telemetry failures
     }
-  };
-  const ensureSessionId = (): string | null => {
+  }, []);
+  const ensureSessionId = useCallback((): string | null => {
     if (typeof crypto === "undefined" || typeof crypto.randomUUID !== "function") {
       const message =
         "Voice intents require crypto.randomUUID; this browser does not support it.";
@@ -141,7 +146,7 @@ export function useVoiceIntents(opts: VoiceIntentOpts = {}): VoiceIntentView {
       return null;
     }
     return crypto.randomUUID();
-  };
+  }, [store, origin, safeTrack]);
   
   const prevFinalRef = useRef<string>("");
   const localSessionRef = useRef<{ sessionId: string | null; lastListening: boolean }>({

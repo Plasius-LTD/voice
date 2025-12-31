@@ -1,5 +1,7 @@
 // tests/mocks/environment.setup.ts
-import { beforeAll, beforeEach, afterAll } from "vitest";
+import { beforeAll, beforeEach, afterAll, afterEach } from "vitest";
+import { cleanup } from "@testing-library/react";
+import { __clearIntentRegistryForTests } from "../../src/components/useVoiceIntents.js";
 import {
   installNavigatorMocks,
   _resetNavigatorMocks,
@@ -22,6 +24,12 @@ beforeAll(() => {
 beforeEach(() => {
   _resetNavigatorMocks();
   _clearSRInstances();
+});
+
+// Ensure all rendered components/hooks are unmounted to avoid jsdom buildup between tests
+afterEach(() => {
+  cleanup();
+  __clearIntentRegistryForTests();
 });
 
 // Clean up at the very end if needed

@@ -9,6 +9,20 @@ The format is based on **[Keep a Changelog](https://keepachangelog.com/en/1.1.0/
 ## [Unreleased]
 
 - **Added**
+  - (placeholder)
+
+- **Changed**
+  - (placeholder)
+
+- **Fixed**
+  - (placeholder)
+
+- **Security**
+  - (placeholder)
+
+## [1.1.0] - 2025-12-31
+
+- **Added**
   - Expanded README with end-to-end usage and intent registration examples.
   - Broader test coverage for voice controls, intents, adapter utilities, and lifecycle helpers; coverage ignores temp artifacts.
   - New `useVoice` convenience hook that composes intents and controls with shared `start`/`stop` helpers.
@@ -346,7 +360,7 @@ The format is based on **[Keep a Changelog](https://keepachangelog.com/en/1.1.0/
 
 ---
 
-[Unreleased]: https://github.com/Plasius-LTD/voice/compare/v1.1.0-beta.10...HEAD
+[Unreleased]: https://github.com/Plasius-LTD/voice/compare/v1.1.0...HEAD
 [1.0.0]: https://github.com/Plasius-LTD/voice/releases/tag/v1.0.0
 [1.0.4]: https://github.com/Plasius-LTD/voice/releases/tag/v1.0.4
 [1.0.5]: https://github.com/Plasius-LTD/voice/releases/tag/v1.0.5
@@ -365,3 +379,4 @@ The format is based on **[Keep a Changelog](https://keepachangelog.com/en/1.1.0/
 [1.1.0-beta.8]: https://github.com/Plasius-LTD/voice/releases/tag/v1.1.0-beta.8
 [1.1.0-beta.9]: https://github.com/Plasius-LTD/voice/releases/tag/v1.1.0-beta.9
 [1.1.0-beta.10]: https://github.com/Plasius-LTD/voice/releases/tag/v1.1.0-beta.10
+[1.1.0]: https://github.com/Plasius-LTD/voice/releases/tag/v1.1.0

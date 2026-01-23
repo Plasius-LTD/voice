@@ -17,6 +17,7 @@
 ## Docs/tests
 - Update README or docs if public API changes.
 - Add/adjust tests in `tests/` when behavior changes.
+- Architectural changes require ADRs in `docs/adrs/` (or the repo ADRs folder); ensure a package-function ADR exists.
 
 ## Review checklist
 - Build passes, tests pass, no changes in generated artifacts.

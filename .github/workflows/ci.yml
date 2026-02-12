@@ -24,14 +24,30 @@ jobs:
         run: npm run build --if-present
 
       - name: Test with coverage
-        run: npm run test:coverage
+        run: |
+          set -euo pipefail
+          if node -e "const p=require('./package.json'); process.exit(p.scripts && p.scripts['test:coverage'] ? 0 : 1)"; then
+            npm run test:coverage
+          else
+            npm run test -- --coverage
+          fi
+
+      - name: Locate coverage report
+        run: |
+          set -euo pipefail
+          LCOV_FILE="$(find coverage -type f -name lcov.info | head -n 1 || true)"
+          if [ -z "$LCOV_FILE" ]; then
+            echo "No lcov.info found under coverage/."
+            exit 1
+          fi
+          echo "Using coverage report: $LCOV_FILE"
+          echo "LCOV_FILE=$LCOV_FILE" >> "$GITHUB_ENV"
 
       - name: Enforce line coverage >= 80%
         run: |
           set -euo pipefail
-          LCOV_FILE="coverage/lcov.info"
-          if [ ! -f "$LCOV_FILE" ]; then
-            echo "Missing coverage report: $LCOV_FILE"
+          if [ -z "${LCOV_FILE:-}" ] || [ ! -f "$LCOV_FILE" ]; then
+            echo "Missing coverage report: ${LCOV_FILE:-unset}"
             exit 1
           fi
 
@@ -56,7 +72,7 @@ jobs:
         uses: codecov/codecov-action@v4
         with:
           token: ${{ secrets.CODECOV_TOKEN }}
-          files: ./coverage/lcov.info
+          files: ${{ env.LCOV_FILE }}
           flags: unittests
           fail_ci_if_error: true
           slug: ${{ github.repository }}

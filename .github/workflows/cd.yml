@@ -163,6 +163,7 @@ jobs:
          files: ./coverage/lcov.info
          flags: unittests
          fail_ci_if_error: true
+         slug: ${{ github.repository }}
 
       - name: Build
         run: npm run build --if-present

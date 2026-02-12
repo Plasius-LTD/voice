@@ -26,8 +26,13 @@ jobs:
       - name: Test with coverage
         run: |
           set -euo pipefail
-          if node -e "const p=require('./package.json'); process.exit(p.scripts && p.scripts['test:coverage'] ? 0 : 1)"; then
+
+          if node -e "const s=(require('./package.json').scripts||{})['test:coverage']||''; process.exit(s.includes('vitest') ? 0 : 1)"; then
+            npm run test:coverage -- --coverage.reporter=lcov --coverage.reporter=text-summary
+          elif node -e "const s=(require('./package.json').scripts||{})['test:coverage']||''; process.exit(s ? 0 : 1)"; then
             npm run test:coverage
+          elif node -e "const s=(require('./package.json').scripts||{}).test||''; process.exit(s.includes('vitest') ? 0 : 1)"; then
+            npm run test -- --coverage --coverage.reporter=lcov --coverage.reporter=text-summary
           else
             npm run test -- --coverage
           fi

@@ -396,3 +396,17 @@ The format is based on **[Keep a Changelog](https://keepachangelog.com/en/1.1.0/
 [1.1.0-beta.10]: https://github.com/Plasius-LTD/voice/releases/tag/v1.1.0-beta.10
 [1.1.0]: https://github.com/Plasius-LTD/voice/releases/tag/v1.1.0
 [1.1.1]: https://github.com/Plasius-LTD/voice/releases/tag/v1.1.1
+
+## [1.1.1] - 2026-02-11
+
+- **Added**
+  - Initial release.
+
+- **Changed**
+  - (placeholder)
+
+- **Fixed**
+  - (placeholder)
+
+- **Security**
+  - (placeholder)

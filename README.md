@@ -26,6 +26,17 @@ npm install @plasius/voice
 
 ---
 
+## Demo
+
+```bash
+npm run build
+node demo/example.mjs
+```
+
+See `demo/README.md` for the local sanity-check scaffold.
+
+---
+
 ## Usage Example
 
 ### One-line hook (intents + controls)

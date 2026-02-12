@@ -35,7 +35,8 @@
     "lint": "eslint .",
     "prepare": "npm run build",
     "clean": "rimraf dist",
-    "test": "vitest run --environment jsdom"
+    "test": "vitest run --environment jsdom",
+    "test:coverage": "vitest run --coverage"
   },
   "dependencies": {
     "@plasius/nfr": "^1",
@@ -60,6 +61,7 @@
     "jsdom": "^27.0.0",
     "prettier": "^3.6.2",
     "react": "^19",
+    "react-dom": "^19.1.0",
     "tsup": "^8.5.0",
     "tsx": "^4.20.5",
     "typescript": "^5.9.2",

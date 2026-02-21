@@ -80,5 +80,8 @@
       "type": "github",
       "url": "https://github.com/sponsors/Plasius-LTD"
     }
-  ]
+  ],
+  "overrides": {
+    "minimatch": "^10.2.1"
+  }
 }

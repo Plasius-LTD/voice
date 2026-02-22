@@ -39,9 +39,9 @@
     "test:coverage": "vitest run --coverage"
   },
   "dependencies": {
-    "@plasius/nfr": "^1",
-    "@plasius/react-state": "^1",
-    "@plasius/translations": "^1"
+    "@plasius/nfr": "^1.0.3",
+    "@plasius/react-state": "^1.2.1",
+    "@plasius/translations": "^1.0.8"
   },
   "peerDependencies": {
     "react": "^19"

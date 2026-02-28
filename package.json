@@ -36,7 +36,9 @@
     "prepare": "npm run build",
     "clean": "rimraf dist",
     "test": "vitest run --environment jsdom",
-    "test:coverage": "vitest run --coverage"
+    "test:coverage": "vitest run --coverage",
+    "pack:check": "node scripts/verify-public-package.cjs",
+    "prepublishOnly": "npm run build && npm run pack:check"
   },
   "dependencies": {
     "@plasius/nfr": "^1.0.3",

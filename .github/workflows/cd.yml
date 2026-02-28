@@ -271,7 +271,7 @@ jobs:
         run: |
           set -euo pipefail
           TAG="${{ steps.pkg.outputs.tag }}"
-          git fetch --tags
+          git fetch --tags --force
           if gh release view "$TAG" >/dev/null 2>&1; then
             echo "Release $TAG already exists; uploading SBOM asset."
           else

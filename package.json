@@ -1,6 +1,6 @@
 {
   "name": "@plasius/voice",
-  "version": "1.1.1",
+  "version": "1.1.2",
   "description": "A Voice -> Intent mapper component library (multi-lingual compatible with @plasius/translations)",
   "homepage": "https://github.com/Plasius-LTD/voice#readme",
   "bugs": {
@@ -41,9 +41,9 @@
     "prepublishOnly": "npm run build && npm run pack:check"
   },
   "dependencies": {
-    "@plasius/nfr": "^1.0.3",
-    "@plasius/react-state": "^1.2.1",
-    "@plasius/translations": "^1.0.8"
+    "@plasius/nfr": "^1.0.4",
+    "@plasius/react-state": "^1.2.2",
+    "@plasius/translations": "^1.0.9"
   },
   "peerDependencies": {
     "react": "^19"

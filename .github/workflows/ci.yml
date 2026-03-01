@@ -20,6 +20,15 @@ jobs:
       - name: Install deps
         run: npm ci --no-fund --no-audit --legacy-peer-deps
 
+      - name: Lint
+        run: npm run lint
+
+      - name: Typecheck
+        run: npm run typecheck
+
+      - name: Security audit (runtime deps)
+        run: npm run audit:npm
+
       - name: Build
         run: npm run build --if-present
 

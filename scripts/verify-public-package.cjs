@@ -1,5 +1,4 @@
 #!/usr/bin/env node
-/* eslint-disable no-console */
 const { execSync } = require("node:child_process");
 const fs = require("node:fs");
 const path = require("node:path");
@@ -29,7 +28,7 @@ function main() {
     },
     {
       label: "local settings artifact",
-      regex: /(?:^|\/)local\.settings(?:\.[^\/]+)?\.json$/i,
+      regex: /(?:^|\/)local\.settings(?:\.[^/]+)?\.json$/i,
     },
     {
       label: "azure host artifact",

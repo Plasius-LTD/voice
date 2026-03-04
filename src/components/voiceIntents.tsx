@@ -56,7 +56,6 @@ const VoiceIntentsInner: React.FC<VoiceIntentsProps> = ({
       }
     };
     // We intentionally don't diff deep on intents; recommend memoization by caller.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [origin, enabled, intents]);
 
   return null;
@@ -99,6 +98,5 @@ export function useAutoVoiceIntents(
         origin,
         intents.map((i) => i.name)
       );
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [origin, enabled, intents]);
 }

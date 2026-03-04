@@ -129,7 +129,6 @@ export function useVoiceControl(
         payload: { volume: clamp01(initialVolume) },
       });
     }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   // Create (or reuse injected) engine that uses the same global store

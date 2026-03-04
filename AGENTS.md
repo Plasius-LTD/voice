@@ -104,3 +104,9 @@
 - Cross-repo rule: when one story requires changes in multiple repositories/packages, create one linked task per affected repository/package.
 - Supersession scope: this addendum overrides only the hierarchy/location parts of the prior Step 5 rule; all other Step 5 guidance remains active.
 
+
+## Release Quality & Delivery Gates
+
+1. Test coverage must be maintained at 80%+ and this is a non-optional gate for release.
+2. A feature or bug fix is not complete until all relevant documentation is updated (`CHANGELOG.md`, `README.md`, ADRs, etc.), the work is committed, pushed, merged to `main`, CI passes, and CD has published/released successfully.
+3. Before starting any new feature, update all `dependencies`, `devDependencies`, and `peerDependencies`; if a dependency update requires modifications, complete that dependency update end-to-end first (commit, push, merge to `main`, CI clean, CD published, and the new published version consumed) before implementing the feature change.

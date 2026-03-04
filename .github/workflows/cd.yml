@@ -263,7 +263,8 @@ jobs:
           git add "$FILE" package.json package-lock.json 2>/dev/null || true
           git commit -m "chore(release): v${VERSION}"
           git tag "v${VERSION}"
-          git push --follow-tags
+          git push origin HEAD
+          git push origin "v${VERSION}"
 
       - name: Create GitHub Release from tag (first-party)
         env:

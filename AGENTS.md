@@ -110,3 +110,5 @@
 1. Test coverage must be maintained at 80%+ and this is a non-optional gate for release.
 2. A feature or bug fix is not complete until all relevant documentation is updated (`CHANGELOG.md`, `README.md`, ADRs, etc.), the work is committed, pushed, merged to `main`, CI passes, and CD has published/released successfully.
 3. Before starting any new feature, update all `dependencies`, `devDependencies`, and `peerDependencies`; if a dependency update requires modifications, complete that dependency update end-to-end first (commit, push, merge to `main`, CI clean, CD published, and the new published version consumed) before implementing the feature change.
+
+4. Quick fixes are not acceptable for test coverage, CI/CD pipelines, or documentation updates. Do not remove tests/checks/docs, lower quality thresholds, or bypass required cases to make work pass; implement durable fixes that preserve or raise quality standards. Prefer effectiveness over short-term efficiency.

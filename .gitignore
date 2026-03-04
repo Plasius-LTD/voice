@@ -3,3 +3,8 @@ dist/
 coverage/
 *.log
 .npm-cache-packcheck/
+
+# Private key material in cert directories (never commit)
+**/certs/**/*-key.pem
+**/certs/**/*.key
+**/certs/**/*.p8

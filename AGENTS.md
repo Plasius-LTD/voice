@@ -112,3 +112,7 @@
 3. Before starting any new feature, update all `dependencies`, `devDependencies`, and `peerDependencies`; if a dependency update requires modifications, complete that dependency update end-to-end first (commit, push, merge to `main`, CI clean, CD published, and the new published version consumed) before implementing the feature change.
 
 4. Quick fixes are not acceptable for test coverage, CI/CD pipelines, or documentation updates. Do not remove tests/checks/docs, lower quality thresholds, or bypass required cases to make work pass; implement durable fixes that preserve or raise quality standards. Prefer effectiveness over short-term efficiency.
+
+5. Accessibility is a first-class quality requirement. User-facing software must meet high accessibility standards (target WCAG 2.2 AA or better), and accessibility regressions are release-blocking.
+6. Code must remain clean and maintainable. Apply SOLID, KISS, and related engineering principles where appropriate, and preserve ACID properties for data integrity in transactional workflows.
+7. Secrets and PII must never be committed to version control. Sensitive values are only permitted in approved local metadata/config (for example `.env*`) and managed secret stores; if exposure occurs, treat it as a blocking incident and rotate/remediate immediately.

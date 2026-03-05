@@ -116,3 +116,5 @@
 5. Accessibility is a first-class quality requirement. User-facing software must meet high accessibility standards (target WCAG 2.2 AA or better), and accessibility regressions are release-blocking.
 6. Code must remain clean and maintainable. Apply SOLID, KISS, and related engineering principles where appropriate, and preserve ACID properties for data integrity in transactional workflows.
 7. Secrets and PII must never be committed to version control. Sensitive values are only permitted in approved local metadata/config (for example `.env*`) and managed secret stores; if exposure occurs, treat it as a blocking incident and rotate/remediate immediately.
+
+8. All new tasks and development work must be tracked in the Plasius GitHub Project (`https://github.com/orgs/Plasius-LTD/projects/1`), which is the source of truth for acceptance criteria and whether a feature is complete.

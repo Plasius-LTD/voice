@@ -118,3 +118,9 @@
 7. Secrets and PII must never be committed to version control. Sensitive values are only permitted in approved local metadata/config (for example `.env*`) and managed secret stores; if exposure occurs, treat it as a blocking incident and rotate/remediate immediately.
 
 8. All new tasks and development work must be tracked in the Plasius GitHub Project (`https://github.com/orgs/Plasius-LTD/projects/1`), which is the source of truth for acceptance criteria and whether a feature is complete.
+
+
+## Mandatory NFR Usage
+
+- Before designing or implementing any new feature, the AI must read and apply [NFR.md](NFR.md).
+- `NFR.md` is the mandatory source of truth for non-functional acceptance criteria for completion.

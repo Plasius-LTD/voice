@@ -120,6 +120,8 @@
 8. All new tasks and development work must be tracked in the Plasius GitHub Project (`https://github.com/orgs/Plasius-LTD/projects/1`), which is the source of truth for acceptance criteria and whether a feature is complete.
 
 
+
+9. Use `@plasius/*` packages as the default building blocks for all new features and tasks. Before implementing new functionality, evaluate existing `@plasius/*` packages and reuse them where they fit. Do not reimplement capabilities that already exist in these packages. If needed behavior is missing, update the appropriate `@plasius/*` package first (tests/docs + commit/push/merge + CI green + CD publish), then consume the new released version in the feature work.
 ## Mandatory NFR Usage
 
 - Before designing or implementing any new feature, the AI must read and apply [NFR.md](NFR.md).

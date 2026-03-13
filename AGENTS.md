@@ -126,3 +126,10 @@
 
 - Before designing or implementing any new feature, the AI must read and apply [NFR.md](NFR.md).
 - `NFR.md` is the mandatory source of truth for non-functional acceptance criteria for completion.
+
+## Task Claiming Policy
+- Related decision reference: `Release Quality & Delivery Gates`, Rule `8`.
+- Before starting implementation work on any tracked task, claim the task in the Plasius GitHub Project so ownership is visible.
+- Do not claim or begin a task that is already `In Progress`, assigned, or otherwise actively owned by another person.
+- If the needed task is already in progress by another owner, stop and ask the user how to proceed instead of duplicating or competing on the same task.
+- If work is required and no task exists yet, create or request the task before implementation begins.

@@ -90,5 +90,8 @@
   ],
   "overrides": {
     "minimatch": "^10.2.1"
+  },
+  "engines": {
+    "node": ">=24"
   }
 }

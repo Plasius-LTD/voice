@@ -95,6 +95,7 @@
 - Maintain code coverage at 80% or higher where possible.
 - Shader-related code is the standing coverage exception.
 - Test coverage at 80%+ is a release gate unless an explicit approved exception applies.
+- Any PR touching source files must include or update tests that cause every changed source file to appear in combined LCOV. Missing changed files in LCOV are a local validation failure, even when total and changed-file percentages are above threshold.
 
 ## 10. Default Delivery Workflow
 - The default for agent-driven engineering work is the full delivery workflow described in `WORKFLOW.md`.

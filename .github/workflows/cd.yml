@@ -193,6 +193,11 @@ jobs:
             exit 0
           fi
 
+          if grep -q "^## \[${VERSION}\]" "$FILE"; then
+            echo "CHANGELOG.md already contains a ${VERSION} release section; skipping changelog update."
+            exit 0
+          fi
+
           DATE=$(date -u +%Y-%m-%d)
           VERSION_LINE="## [${VERSION}] - ${DATE}"
 

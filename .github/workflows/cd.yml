@@ -273,10 +273,10 @@ jobs:
 
       - name: Create GitHub Release draft (immutable-safe)
         env:
-          GITHUB_TOKEN: ${ secrets.GITHUB_TOKEN }
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           set -euo pipefail
-          TAG="${ steps.pkg.outputs.tag }"
+          TAG="${{ steps.pkg.outputs.tag }}"
           if gh release view "$TAG" >/dev/null 2>&1; then
             IS_DRAFT="$(gh release view "$TAG" --json isDraft --jq '.isDraft')"
             if [ "$IS_DRAFT" != "true" ]; then
@@ -306,10 +306,10 @@ jobs:
 
       - name: Publish GitHub Release
         env:
-          GITHUB_TOKEN: ${ secrets.GITHUB_TOKEN }
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           set -euo pipefail
-          TAG="${ steps.pkg.outputs.tag }"
+          TAG="${{ steps.pkg.outputs.tag }}"
           if ! gh release view "$TAG" >/dev/null 2>&1; then
             echo "Expected draft release $TAG to exist before publication."
             exit 1

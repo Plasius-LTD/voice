@@ -271,26 +271,31 @@ jobs:
           git push origin HEAD
           git push origin "v${VERSION}"
 
-      - name: Create GitHub Release from tag (first-party)
+      - name: Create GitHub Release draft (immutable-safe)
         env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GITHUB_TOKEN: ${ secrets.GITHUB_TOKEN }
         run: |
           set -euo pipefail
-          TAG="${{ steps.pkg.outputs.tag }}"
-          git fetch --tags --force
+          TAG="${ steps.pkg.outputs.tag }"
           if gh release view "$TAG" >/dev/null 2>&1; then
-            echo "Release $TAG already exists; uploading SBOM asset."
+            IS_DRAFT="$(gh release view "$TAG" --json isDraft --jq '.isDraft')"
+            if [ "$IS_DRAFT" != "true" ]; then
+              echo "Release $TAG already exists and is published. Immutable releases cannot be modified after publication; cut a new version instead."
+              exit 1
+            fi
+
+            echo "Draft release $TAG already exists; refreshing mutable assets."
+            if [ -f sbom.cdx.json ]; then
+              gh release upload "$TAG" sbom.cdx.json --clobber
+            else
+              echo "No SBOM generated; leaving existing draft assets unchanged."
+            fi
           else
-            gh release create "$TAG" \
-              --title "Release $TAG" \
-              --generate-notes \
-              --latest
-          fi
-          # Upload/overwrite the SBOM asset on the release
-          if [ -f sbom.cdx.json ]; then
-            gh release upload "$TAG" sbom.cdx.json --clobber
-          else
-            echo "No SBOM generated; skipping upload."
+            if [ -f sbom.cdx.json ]; then
+              gh release create "$TAG" sbom.cdx.json                 --title "Release $TAG"                 --generate-notes                 --verify-tag                 --draft
+            else
+              gh release create "$TAG"                 --title "Release $TAG"                 --generate-notes                 --verify-tag                 --draft
+            fi
           fi
 
       - name: Publish
@@ -298,3 +303,21 @@ jobs:
           NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
         run: |
           npm publish ${{ steps.pkg.outputs.flags }} --provenance
+
+      - name: Publish GitHub Release
+        env:
+          GITHUB_TOKEN: ${ secrets.GITHUB_TOKEN }
+        run: |
+          set -euo pipefail
+          TAG="${ steps.pkg.outputs.tag }"
+          if ! gh release view "$TAG" >/dev/null 2>&1; then
+            echo "Expected draft release $TAG to exist before publication."
+            exit 1
+          fi
+
+          IS_DRAFT="$(gh release view "$TAG" --json isDraft --jq '.isDraft')"
+          if [ "$IS_DRAFT" = "true" ]; then
+            gh release edit "$TAG" --draft=false --latest
+          else
+            echo "Release $TAG is already published; skipping publication."
+          fi

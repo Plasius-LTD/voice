@@ -12,12 +12,9 @@ export default defineConfig({
     globals: true,
     include: ["tests/**/*.test.{ts,tsx}"],
     passWithNoTests: false,
-    poolOptions: {
-      // CI runners are memory constrained; run tests in a single worker to avoid jsdom-heavy OOMs.
-      threads: isCI ? { singleThread: true } : undefined,
-    },
+    // Vitest 4 removed poolOptions; keep CI on one worker to avoid jsdom-heavy OOMs.
+    maxWorkers: isCI ? 1 : undefined,
     coverage: {
-      all: false,
       provider: "v8",
       reporter: ["text", "json", "html", "lcov"],
       reportsDirectory: "./coverage",

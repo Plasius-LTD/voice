@@ -27,6 +27,7 @@ The format is based on **[Keep a Changelog](https://keepachangelog.com/en/1.1.0/
 
 - **Changed**
   - Refreshed dependencies to the latest stable published versions.
+  - Migrated the Vitest worker configuration to the supported Vitest 4 top-level settings for CI single-worker runs.
   - (placeholder)
 
 - **Fixed**

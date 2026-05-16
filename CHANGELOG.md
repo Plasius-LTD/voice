@@ -15,7 +15,7 @@ The format is based on **[Keep a Changelog](https://keepachangelog.com/en/1.1.0/
   - (placeholder)
 
 - **Fixed**
-  - (placeholder)
+  - Restored deterministic coverage for the Web Speech start-error recovery path so failed starts are verified to stop the stale recognizer, emit telemetry, and create a fresh session.
 
 - **Security**
   - (placeholder)

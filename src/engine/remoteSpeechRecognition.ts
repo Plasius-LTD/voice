@@ -158,8 +158,21 @@ const DEFAULT_MIME_TYPES = [
 
 const now = () => (globalThis.performance as any)?.now?.() ?? Date.now();
 
+const generateSecureRandomBytes = (length = 16) => {
+  const cryptoApi = globalThis.crypto;
+  if (!cryptoApi?.getRandomValues) {
+    throw new Error("Secure random generator is unavailable.");
+  }
+  const bytes = new Uint8Array(length);
+  cryptoApi.getRandomValues(bytes);
+  return bytes;
+};
+
 const newSessionId = () =>
-  globalThis.crypto?.randomUUID?.() ?? Math.random().toString(36).slice(2);
+  globalThis.crypto?.randomUUID?.() ??
+  Array.from(generateSecureRandomBytes())
+    .map((value) => value.toString(16).padStart(2, "0"))
+    .join("");
 
 const emit = (name: string, props?: Record<string, unknown>) => {
   try {

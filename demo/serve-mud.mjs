@@ -1,5 +1,5 @@
 import { createServer } from "node:http";
-import { readFile, stat } from "node:fs/promises";
+import { readFile } from "node:fs/promises";
 import path from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
 
@@ -19,11 +19,21 @@ const contentTypes = {
 
 function resolveRequestPath(requestUrl) {
   const url = new URL(requestUrl || "/", "http://127.0.0.1");
-  const pathname = decodeURIComponent(url.pathname);
+  let pathname;
+  try {
+    pathname = decodeURIComponent(url.pathname);
+  } catch {
+    return null;
+  }
   const normalizedPath = pathname === "/" ? "/demo/voice-mud.html" : pathname;
   const filePath = path.resolve(root, `.${normalizedPath}`);
+  const relativePath = path.relative(root, filePath);
 
-  if (!filePath.startsWith(`${root}${path.sep}`) && filePath !== root) {
+  if (
+    relativePath === "" ||
+    relativePath.startsWith(`..${path.sep}`) ||
+    path.isAbsolute(relativePath)
+  ) {
     return null;
   }
 
@@ -31,21 +41,21 @@ function resolveRequestPath(requestUrl) {
 }
 
 async function sendFile(response, filePath) {
-  const fileStat = await stat(filePath);
-  if (!fileStat.isFile()) {
-    response.writeHead(404);
-    response.end("Not found");
-    return;
+  try {
+    const body = await readFile(filePath);
+    const extension = path.extname(filePath);
+    response.writeHead(200, {
+      "Content-Type": contentTypes[extension] || "application/octet-stream",
+      "Cache-Control": "no-store",
+      "Permissions-Policy": "microphone=(self)",
+    });
+    response.end(body);
+  } catch (error) {
+    const notFound =
+      error && (error.code === "ENOENT" || error.code === "EISDIR");
+    response.writeHead(notFound ? 404 : 500);
+    response.end(notFound ? "Not found" : "Server error");
   }
-
-  const extension = path.extname(filePath);
-  const body = await readFile(filePath);
-  response.writeHead(200, {
-    "Content-Type": contentTypes[extension] || "application/octet-stream",
-    "Cache-Control": "no-store",
-    "Permissions-Policy": "microphone=(self)",
-  });
-  response.end(body);
 }
 
 function createMudServer() {
@@ -57,11 +67,7 @@ function createMudServer() {
       return;
     }
 
-    sendFile(response, filePath).catch((error) => {
-      const notFound = error && error.code === "ENOENT";
-      response.writeHead(notFound ? 404 : 500);
-      response.end(notFound ? "Not found" : "Server error");
-    });
+    sendFile(response, filePath);
   });
 }
 

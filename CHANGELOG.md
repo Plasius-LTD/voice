@@ -9,12 +9,21 @@ The format is based on **[Keep a Changelog](https://keepachangelog.com/en/1.1.0/
 ## [Unreleased]
 
 - **Added**
+  - Remote speech recognition fallback support with fetch-backed and custom client adapters for browsers where Web Speech is unavailable or service-disabled.
+  - Local speech recognition adapter support so native, WebGPU, WebAssembly, or app-shell recognizers can run before Web Speech or remote fallback.
+  - `useSpeechRecognitionEngine`, `useRemoteSpeechEngine`, and remote recognition helper exports for provider-neutral speech-to-text integration.
+  - WebGPU local-recognition policy controls for rendering-aware fallback and short command-capture bounds.
+  - Browser voice MUD demo for microphone permission, Web Speech navigation, transcript mirroring, typed fallback, and command parser testing.
+  - Consumer upgrade guidance for wiring recognition engines when using `VoiceProvider` and `useVoiceIntents` directly.
+  - `createGlobalVoiceStore` from the package entrypoint for consumers that need shared-store intent/control composition.
   - (placeholder)
 
 - **Changed**
+  - `useVoiceControl` now uses an auto-selecting recognition engine and can switch through local, Web Speech, and remote recognizers as availability changes.
   - (placeholder)
 
 - **Fixed**
+  - Treat Web Speech `service-not-allowed` as a recognizer service failure instead of a microphone permission denial so remote fallback can still run.
   - (placeholder)
 
 - **Security**
@@ -27,6 +36,7 @@ The format is based on **[Keep a Changelog](https://keepachangelog.com/en/1.1.0/
 
 - **Changed**
   - Refreshed dependencies to the latest stable published versions.
+  - Migrated the Vitest worker configuration to the supported Vitest 4 top-level settings for CI single-worker runs.
   - (placeholder)
 
 - **Fixed**

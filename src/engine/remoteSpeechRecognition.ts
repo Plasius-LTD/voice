@@ -378,6 +378,7 @@ function useRecordedSpeechEngine(
   const client = opts.client;
   const recognition = opts.recognition;
   const disposedRef = useRef(false);
+  const enabledRef = useRef(enabled);
   const stopRemoteRef = useRef<(() => void) | null>(null);
   const cleanupsRef = useRef<(() => void)[]>([]);
   const recorderRef = useRef<MediaRecorder | null>(null);
@@ -411,6 +412,7 @@ function useRecordedSpeechEngine(
   }, [enabled, opts.continuous, opts.interim, opts.lang, store]);
 
   useEffect(() => {
+    enabledRef.current = enabled;
     if (!enabled) return;
 
     const mediaDevices = (globalThis as any)?.navigator?.mediaDevices;
@@ -614,6 +616,7 @@ function useRecordedSpeechEngine(
             .finally(() => {
               if (
                 !disposedRef.current &&
+                enabledRef.current &&
                 store.getState().continuous &&
                 store.getState().wantListening
               ) {
@@ -665,7 +668,7 @@ function useRecordedSpeechEngine(
 
     const syncWantedState = () => {
       const state = store.getState();
-      if (disposedRef.current) return;
+      if (disposedRef.current || !enabledRef.current) return;
       if (state.wantListening && !state.muted) {
         void startRemote();
       } else {

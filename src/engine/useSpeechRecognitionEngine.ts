@@ -72,21 +72,30 @@ export function useSpeechRecognitionEngine(
   const remoteConfigured = isRemoteSpeechRecognitionConfigured(
     opts.remoteRecognition
   );
-  const previousLocalConfigRef = useRef<LocalSpeechRecognitionConfig | undefined>();
-  const previousRemoteConfigRef = useRef<RemoteSpeechRecognitionConfig | undefined>();
+  const previousModeRef = useRef<string | undefined>();
+  const previousLocalConfiguredRef = useRef<boolean | undefined>();
+  const previousRemoteConfiguredRef = useRef<boolean | undefined>();
+  const previousHasWebSpeechRef = useRef<boolean | undefined>();
 
   useEffect(() => {
-    const localRecognitionChanged =
-      previousLocalConfigRef.current !== opts.localRecognition;
-    const remoteRecognitionChanged =
-      previousRemoteConfigRef.current !== opts.remoteRecognition;
+    const modeChanged = previousModeRef.current !== mode;
+    const localConfiguredChanged = previousLocalConfiguredRef.current !== localConfigured;
+    const remoteConfiguredChanged = previousRemoteConfiguredRef.current !== remoteConfigured;
+    const hasWebSpeechChanged = previousHasWebSpeechRef.current !== hasWebSpeech;
 
-    if (localRecognitionChanged || remoteRecognitionChanged) {
+    if (
+      modeChanged ||
+      localConfiguredChanged ||
+      remoteConfiguredChanged ||
+      hasWebSpeechChanged
+    ) {
       setFailedTiers({});
-      previousLocalConfigRef.current = opts.localRecognition;
-      previousRemoteConfigRef.current = opts.remoteRecognition;
+      previousModeRef.current = mode;
+      previousLocalConfiguredRef.current = localConfigured;
+      previousRemoteConfiguredRef.current = remoteConfigured;
+      previousHasWebSpeechRef.current = hasWebSpeech;
     }
-  }, [mode, localConfigured, remoteConfigured, opts.localRecognition, opts.remoteRecognition]);
+  }, [mode, localConfigured, remoteConfigured, hasWebSpeech]);
 
   const useLocal =
     mode === "local" ||

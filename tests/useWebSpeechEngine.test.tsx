@@ -131,6 +131,7 @@ beforeEach(() => {
     autoEmitStart: false,
     autoEmitEndOnStop: false,
     throwIfDoubleStart: false,
+    failNextStartWithName: null,
   });
 });
 
@@ -535,11 +536,22 @@ describe("useWebSpeechEngine", () => {
     expect(startSpy).toHaveBeenCalled(); // restart attempt
   });
 
-  // Not yet functional.
-  it.skip("start failure triggers stopAndWait and a fresh SR start", async () => {
+  it("start denial emits recovery telemetry, stops the stale recognizer, and starts a fresh session", async () => {
     const { dispatch } = globalVoiceStore;
 
-    // Render hook (installs engine effects)
+    await act(async () => {
+      dispatch({ type: "REQ/STOP" });
+      dispatch({ type: "EVT/END" });
+      dispatch({
+        type: "INT/SET_CONFIG",
+        payload: { lang: "en-GB", interim: false, continuous: false },
+      });
+      dispatch({
+        type: "INT/SET_PERMISSIONS",
+        payload: { permission: "granted" },
+      });
+    });
+
     renderHook(
       () =>
         useWebSpeechEngine({
@@ -550,41 +562,28 @@ describe("useWebSpeechEngine", () => {
       { wrapper: Wrapper }
     );
 
-    // Spy on the SR prototype *before* any instance is created, and make the first start() throw
-    const SRc =
-      (globalThis as any).SpeechRecognition ??
-      (globalThis as any).webkitSpeechRecognition;
-    expect(SRc).toBeTruthy();
-    const startSpy = vi
-      .spyOn((SRc as any).prototype, "start")
-      .mockImplementationOnce(() => {
-        const err = new Error("not-allowed");
-        (err as any).name = "NotAllowedError";
-        throw err;
-      });
+    _setSRMockConfig({ failNextStartWithName: "NotAllowedError" });
 
-    // Trigger a start request — engine will create an instance and call start(), which will throw once
-    await act(async () =>
-      dispatch({
-        type: "REQ/START",
-        payload: { continuous: true, lang: "en-GB", interim: true },
+    await act(async () => {
+      dispatch({ type: "REQ/START" });
+    });
+    await act(async () => {});
+
+    expect(track).toHaveBeenCalledWith(
+      "webspeech:start-error",
+      expect.objectContaining({
+        msg: expect.stringContaining("NotAllowedError"),
       })
     );
 
-    // stopAndWait should be called to clean the stuck recognizer
-    await act(async () => {});
-    expect(stopAndWait).toHaveBeenCalled();
-    expect(startSpy).toHaveBeenCalled();
-
-    // Fresh SR should be created and started (no need for a second REQ/START)
     const instances = _getSRInstances();
-    expect(instances.length).toBeGreaterThanOrEqual(1);
-    // Grab the last call
-    const [event, payload] = (track as any).mock.calls.at(-1)!;
-
-    expect(event).toBe("webspeech:start-error");
-    // See all fields clearly in failures
-    expect(payload).toMatchInlineSnapshot();
+    expect(instances).toHaveLength(2);
+    expect(instances[0]?.startCalls).toBe(1);
+    expect(instances[1]?.startCalls).toBe(1);
+    expect(stopAndWait).toHaveBeenCalledWith(instances[0]);
+    expect(globalVoiceStore.getState().lastError).toMatch(
+      /not-allowed|NotAllowedError/
+    );
   });
 
   it("dispose stops, resets engine local state, and calls stopAndWait", async () => {

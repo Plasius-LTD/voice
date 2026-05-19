@@ -12,11 +12,13 @@ type Cfg = {
   autoEmitStart: boolean; // auto-call onstart on next microtask after start()
   autoEmitEndOnStop: boolean; // auto-call onend on next microtask after stop()/abort()
   throwIfDoubleStart: boolean; // mimic browsers throwing on start() when already started
+  failNextStartWithName: string | null; // inject a deterministic sync start failure for tests
 };
 const defaultCfg: Cfg = {
   autoEmitStart: false,
   autoEmitEndOnStop: false,
   throwIfDoubleStart: false,
+  failNextStartWithName: null,
 };
 if (!g[SR_CONFIG_SYM]) g[SR_CONFIG_SYM] = { ...defaultCfg } as Cfg;
 
@@ -61,13 +63,21 @@ export class FakeSpeechRecognition {
 
   start() {
     this.startCalls++;
-    if (this._started && getCfg().throwIfDoubleStart) {
+    const cfg = getCfg();
+    if (cfg.failNextStartWithName) {
+      const errorName = cfg.failNextStartWithName;
+      cfg.failNextStartWithName = null;
+      const err = new Error("not-allowed");
+      (err as Error & { name: string }).name = errorName;
+      throw err;
+    }
+    if (this._started && cfg.throwIfDoubleStart) {
       throw Object.assign(new Error("InvalidStateError"), { name: "InvalidStateError" });
     }
     this._started = true;
     this._ended = false;
 
-    if (getCfg().autoEmitStart) {
+    if (cfg.autoEmitStart) {
       // next microtask → onstart
       this._startTimer = queueMicrotask(() => {
         this._startTimer = null as any;

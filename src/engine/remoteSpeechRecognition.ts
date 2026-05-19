@@ -378,6 +378,7 @@ function useRecordedSpeechEngine(
   const client = opts.client;
   const recognition = opts.recognition;
   const disposedRef = useRef(false);
+  const stopRemoteRef = useRef<(() => void) | null>(null);
   const cleanupsRef = useRef<(() => void)[]>([]);
   const recorderRef = useRef<MediaRecorder | null>(null);
   const streamRef = useRef<MediaStream | null>(null);
@@ -639,6 +640,7 @@ function useRecordedSpeechEngine(
       stopTracks();
       store.dispatch({ type: "EVT/END" });
     };
+    stopRemoteRef.current = stopRemote;
 
     const syncWantedState = () => {
       const state = store.getState();
@@ -692,6 +694,7 @@ function useRecordedSpeechEngine(
         store.dispatch({ type: "REQ/STOP" });
       },
       dispose() {
+        stopRemoteRef.current?.();
         disposedRef.current = true;
         store.dispatch({ type: "REQ/STOP" });
         abortRef.current?.abort();

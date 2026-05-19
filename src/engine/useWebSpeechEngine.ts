@@ -328,6 +328,7 @@ export function useWebSpeechEngine(opts: WebSpeechEngineOptions): WebSpeechEngin
   // 3) Manage SR lifecycle in response to global store changes
   useEffect(() => {
     if (!enabled) return;
+    disposedRef.current = false;
     const SR = getSRCtor();
     if (!SR) return;
 
@@ -503,6 +504,20 @@ export function useWebSpeechEngine(opts: WebSpeechEngineOptions): WebSpeechEngin
     localCleanups.push(uMuted);
 
     return () => {
+      const current = recRef.current;
+      recRef.current = null;
+      if (current) {
+        stopAndWait(current).catch((e) => {
+          try {
+            track("webspeech:stopAndWait-error", {
+              code: String((e as any)?.name || ""),
+              msg: String(e),
+              sessionId: (current as any).__sessionId || null,
+            });
+          } catch {}
+        });
+      }
+
       for (const fn of localCleanups.splice(0)) {
         try {
           fn();

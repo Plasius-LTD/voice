@@ -385,6 +385,7 @@ function useRecordedSpeechEngine(
   const abortRef = useRef<AbortController | null>(null);
   const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const activeSessionRef = useRef<string | null>(null);
+  const startRequestRef = useRef(0);
   const localStateRef = useRef<EngineState>({
     sessionId: null,
     startedAt: undefined,
@@ -512,6 +513,7 @@ function useRecordedSpeechEngine(
 
     const startRemote = async () => {
       const state = store.getState();
+      const startRequest = ++startRequestRef.current;
       if (
         disposedRef.current ||
         recorderRef.current ||
@@ -537,18 +539,23 @@ function useRecordedSpeechEngine(
       }
 
       const sessionId = newSessionId();
-      activeSessionRef.current = sessionId;
+      const requestedDeviceId = state.deviceId ?? null;
       chunksRef.current = [];
 
       try {
         const stream = await mediaDevices.getUserMedia(
           resolveConstraints(state, recognition)
         );
-        if (disposedRef.current || !store.getState().wantListening) {
+        if (
+          startRequestRef.current !== startRequest ||
+          disposedRef.current ||
+          !store.getState().wantListening
+        ) {
           for (const track of stream.getTracks()) track.stop();
           return;
         }
 
+        activeSessionRef.current = sessionId;
         streamRef.current = stream;
         const mimeType = selectMimeType(recognition);
         const recorderOptions = {
@@ -579,7 +586,7 @@ function useRecordedSpeechEngine(
           clearChunkTimer();
           const chunks = chunksRef.current.splice(0);
           const currentMimeType = recorder.mimeType || mimeType;
-          const currentDeviceId = store.getState().deviceId;
+          const currentDeviceId = requestedDeviceId;
           recorderRef.current = null;
           stopTracks();
           updateLocal({ endedAt: now() });
@@ -619,6 +626,7 @@ function useRecordedSpeechEngine(
     };
 
     const stopRemote = () => {
+      startRequestRef.current += 1;
       clearChunkTimer();
       abortRef.current?.abort();
       abortRef.current = null;

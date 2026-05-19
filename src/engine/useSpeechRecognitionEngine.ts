@@ -115,6 +115,8 @@ export function useSpeechRecognitionEngine(
       hasWebSpeech &&
       !failedTiers.webSpeech);
 
+  const hasLocalFallback = mode === "auto" && (remoteConfigured || hasWebSpeech);
+
   const localSpeechEngine = useLocalSpeechEngine({
     lang: opts.lang,
     interim: opts.interim,
@@ -140,14 +142,14 @@ export function useSpeechRecognitionEngine(
   });
 
   useEffect(() => {
-    if (mode !== "auto" || !useLocal) return;
+    if (mode !== "auto" || !useLocal || !hasLocalFallback) return;
 
     return store.subscribeToKey("lastError", (error) => {
       if (!error) return;
       setFailedTiers((current) => ({ ...current, local: true }));
       emit("speech-recognition:fallback-local", { error });
     });
-  }, [mode, store, useLocal]);
+  }, [mode, store, useLocal, hasLocalFallback]);
 
   useEffect(() => {
     if (mode !== "auto" || !remoteConfigured || !useWebSpeech) return;

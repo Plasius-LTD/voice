@@ -251,6 +251,7 @@ export function useWebSpeechEngine(opts: WebSpeechEngineOptions): WebSpeechEngin
   const actions = useMemo(() => createActions(store), [store]);
   const recRef = useRef<SpeechRecognition | null>(null);
   const disposedRef = useRef(false);
+  const wasEnabledRef = useRef(false);
   const cleanupsRef = useRef<(() => void)[]>([]);
   const enabled = opts.enabled ?? true;
 
@@ -259,6 +260,14 @@ export function useWebSpeechEngine(opts: WebSpeechEngineOptions): WebSpeechEngin
     if (!enabled) return;
     actions.setConfig(opts.lang, !!opts.interim, !!opts.continuous);
   }, [actions, enabled, opts.lang, opts.interim, opts.continuous]);
+
+  // Reset a temporary disable disposal gate when web speech is re-enabled.
+  useEffect(() => {
+    if (!wasEnabledRef.current && enabled) {
+      disposedRef.current = false;
+    }
+    wasEnabledRef.current = enabled;
+  }, [enabled]);
 
   // 2) One-time environment wiring: device watcher + permissions probe
   useEffect(() => {
@@ -328,7 +337,6 @@ export function useWebSpeechEngine(opts: WebSpeechEngineOptions): WebSpeechEngin
   // 3) Manage SR lifecycle in response to global store changes
   useEffect(() => {
     if (!enabled) return;
-    disposedRef.current = false;
     const SR = getSRCtor();
     if (!SR) return;
 

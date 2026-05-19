@@ -512,6 +512,21 @@ function useRecordedSpeechEngine(
       }
     };
 
+    const isPermissionDeniedError = (error: unknown) => {
+      const name = String(
+        (error as { name?: string } | null | undefined)?.name ?? ""
+      ).toLowerCase();
+      const message = String(
+        (error as { message?: string } | null | undefined)?.message ?? error
+      ).toLowerCase();
+      return (
+        name === "notallowederror" ||
+        name === "permissiondeniederror" ||
+        message.includes("notallowed") ||
+        message.includes("permission denied")
+      );
+    };
+
     const startRemote = async () => {
       const state = store.getState();
       const startRequest = ++startRequestRef.current;
@@ -622,6 +637,12 @@ function useRecordedSpeechEngine(
           }, chunkMs);
         }
       } catch (error) {
+        if (isPermissionDeniedError(error)) {
+          store.dispatch({
+            type: "INT/SET_PERMISSIONS",
+            payload: { permission: "denied" },
+          });
+        }
         fail(error);
       }
     };

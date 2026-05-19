@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { track } from "@plasius/nfr";
 import {
   globalVoiceStore as defaultGlobalVoiceStore,
@@ -72,10 +72,21 @@ export function useSpeechRecognitionEngine(
   const remoteConfigured = isRemoteSpeechRecognitionConfigured(
     opts.remoteRecognition
   );
+  const previousLocalConfigRef = useRef<LocalSpeechRecognitionConfig | undefined>();
+  const previousRemoteConfigRef = useRef<RemoteSpeechRecognitionConfig | undefined>();
 
   useEffect(() => {
-    setFailedTiers({});
-  }, [localConfigured, mode, remoteConfigured]);
+    const localRecognitionChanged =
+      previousLocalConfigRef.current !== opts.localRecognition;
+    const remoteRecognitionChanged =
+      previousRemoteConfigRef.current !== opts.remoteRecognition;
+
+    if (localRecognitionChanged || remoteRecognitionChanged) {
+      setFailedTiers({});
+      previousLocalConfigRef.current = opts.localRecognition;
+      previousRemoteConfigRef.current = opts.remoteRecognition;
+    }
+  }, [mode, localConfigured, remoteConfigured, opts.localRecognition, opts.remoteRecognition]);
 
   const useLocal =
     mode === "local" ||

@@ -601,6 +601,10 @@ function useRecordedSpeechEngine(
           });
         };
         recorder.onstop = () => {
+          if (activeSessionRef.current !== sessionId) {
+            return;
+          }
+
           clearChunkTimer();
           const chunks = chunksRef.current.splice(0);
           const currentMimeType = recorder.mimeType || mimeType;
@@ -614,6 +618,9 @@ function useRecordedSpeechEngine(
           void submit(sessionId, chunks, currentMimeType, currentDeviceId)
             .catch(fail)
             .finally(() => {
+              if (activeSessionRef.current !== sessionId) {
+                return;
+              }
               if (
                 !disposedRef.current &&
                 enabledRef.current &&

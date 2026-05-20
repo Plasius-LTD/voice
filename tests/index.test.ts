@@ -7,5 +7,6 @@ describe("index.ts exports", () => {
     // Spot check a few known exports
     expect(typeof index.useVoiceIntents).toBe("function");
     expect(typeof index.VoiceProvider).toBe("function");
+    expect(typeof index.createGlobalVoiceStore).toBe("function");
   });
 });

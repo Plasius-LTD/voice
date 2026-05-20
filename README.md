@@ -16,6 +16,8 @@ Apache-2.0. ESM + CJS builds. TypeScript types included.
 
 `@plasius/voice` is a React hook and provider for adding speech recognition and voice controls to your applications. It wraps the Web Speech API with a stateful interface, controls (mute, volume, push-to-talk), and an intent registration system for mapping spoken commands to actions.
 
+Web Speech recognition is not available in every browser and can also fail when a browser-side recognition service is disabled. For production use, configure a remote recognition fallback that records microphone audio with `MediaRecorder` and posts it to your own server-side speech-to-text endpoint. Keep provider secrets on the server; the package only sends captured audio to the endpoint or client you provide.
+
 ---
 
 ## Installation
@@ -33,7 +35,16 @@ npm run build
 node demo/example.mjs
 ```
 
-See `demo/README.md` for the local sanity-check scaffold.
+For browser voice navigation testing, run the MUD test bed:
+
+```bash
+npm run build
+npm run demo:mud
+```
+
+Open the printed localhost URL, approve microphone access, and use commands
+such as `west`, `take key`, `east`, `take lantern`, `unlock gate`, `north`, and
+`light lantern`. See `demo/README.md` for the local demo scaffolds.
 
 ---
 
@@ -153,12 +164,131 @@ function VoiceTranscript() {
 
 export default function App() {
   return (
-    <VoiceProvider opts={{ origin: "App", lang: "en-GB", interim: true }}>
+    <VoiceProvider options={{ origin: "App", lang: "en-GB", interim: true }}>
       <h1>My Voice-Enabled App</h1>
       <VoiceControls />
       <VoiceTranscript />
     </VoiceProvider>
   );
+}
+```
+
+### Local and remote speech recognition fallback
+
+Use `engineConfig.localRecognition` and `engineConfig.remoteRecognition` from `useVoiceControl` or `useVoice`. In `auto` mode, the package prefers a configured local recognizer, then Web Speech, then remote recognition when lower tiers are unavailable or fail.
+
+The local recognizer is an adapter contract. Host apps can wire it to Apple Speech, Android `SpeechRecognizer`, Windows `SpeechRecognizer`, a WebGPU/WebAssembly model, or another native bridge without adding those dependencies to `@plasius/voice`.
+
+```ts
+import { useVoice, type LocalSpeechRecognitionClient } from "@plasius/voice";
+
+const localClient: LocalSpeechRecognitionClient = async ({ audio, lang, signal }) => {
+  return nativeSpeechBridge.transcribe({ audio, lang, signal });
+};
+
+export function VoicePanel({ voiceFallbackEnabled }: { voiceFallbackEnabled: boolean }) {
+  const { intents, control, start, stop } = useVoice({
+    intents: { origin: "Search", lang: "en-GB", interim: true },
+    control: {
+      enableGlobalKeyboard: false,
+      engineConfig: {
+        mode: "auto",
+        localRecognition: {
+          enabled: true,
+          executionTarget: "native",
+          adapterName: "apple-speech",
+          client: localClient,
+        },
+        remoteRecognition: {
+          enabled: voiceFallbackEnabled,
+          endpoint: "/api/voice/speech-to-text",
+          fieldName: "audio",
+          metadata: { source: "search-panel" },
+        },
+      },
+    },
+  });
+
+  return (
+    <section>
+      <button onClick={start}>Start</button>
+      <button onClick={stop}>Stop</button>
+      <button {...control.pttButtonProps}>Push to Talk</button>
+      <output>{intents.partial || intents.transcript}</output>
+    </section>
+  );
+}
+```
+
+For WebGPU local recognizers, keep recognition out of the rendering hot path. `executionTarget: "webgpu"` automatically requires `navigator.gpu`; by default it also skips the local recognizer when `gpuPolicy.isRenderingActive()` returns true and limits single recordings to 4000ms unless you override it.
+
+```ts
+localRecognition: {
+  enabled: webGpuVoiceEnabled,
+  executionTarget: "webgpu",
+  client: webGpuTranscriber,
+  gpuPolicy: {
+    isRenderingActive: () => renderer.isFrameBudgetTight(),
+    maxRecordingMs: 2500,
+  },
+}
+```
+
+The endpoint receives `multipart/form-data` with `audio`, `lang`, `interim`, `continuous`, `sessionId`, and `mimeType` fields. Return JSON with `transcript` or `text`:
+
+```json
+{ "transcript": "show black running shoes" }
+```
+
+For non-browser shells, hosted webviews, or a custom speech vendor SDK, pass a `client` instead of an endpoint:
+
+```ts
+import type { RemoteSpeechRecognitionClient } from "@plasius/voice";
+
+const client: RemoteSpeechRecognitionClient = async ({ audio, lang, signal }) => {
+  const response = await mySpeechSdk.transcribe({ audio, lang, signal });
+  return { transcript: response.text };
+};
+```
+
+### Consumer upgrade guidance
+
+Consumers that already use `useVoice` can add fallback recognition by passing
+`control.engineConfig`. This keeps intents and recognition controls on one
+shared store.
+
+Consumers that use `VoiceProvider` and `useVoiceIntents` directly should also
+mount `useVoiceControl` against the same `globalStore`, or switch to `useVoice`,
+otherwise they only register intents and dispatch start/stop requests. The
+recognition engine is owned by `useVoiceControl`.
+
+```ts
+import {
+  createGlobalVoiceStore,
+  useVoiceControl,
+  useVoiceIntents,
+} from "@plasius/voice";
+
+const voiceStore = createGlobalVoiceStore();
+
+export function VoiceConsumer() {
+  const intents = useVoiceIntents({
+    origin: "Game",
+    continuous: true,
+    globalStore: voiceStore,
+  });
+  const control = useVoiceControl({
+    globalStore: voiceStore,
+    engineConfig: {
+      mode: "auto",
+      remoteRecognition: {
+        enabled: true,
+        endpoint: "/api/voice/speech-to-text",
+      },
+    },
+  });
+
+  return <button {...control.pttButtonProps}>{intents.partial || "Talk"}</button>;
 }
 ```
 

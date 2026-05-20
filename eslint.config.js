@@ -23,6 +23,14 @@ export default [
     },
   },
   {
+    files: ["demo/voice-mud.js"],
+    languageOptions: {
+      globals: {
+        ...globals.browser,
+      },
+    },
+  },
+  {
     files: ["**/*.ts", "**/*.tsx"],
     languageOptions: {
       parser: tsParser,

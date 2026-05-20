@@ -480,13 +480,13 @@ describe("useWebSpeechEngine", () => {
     const [sr] = _getSRInstances();
     expect(sr).toBeTruthy();
 
-    // fatal error (service-not-allowed) should set permission denied
+    // service-not-allowed is a Web Speech service failure, not a microphone denial.
     await act(async () => {
       (sr as any).emitError({ error: "service-not-allowed" });
     });
 
     await act(async () => {});
-    expect(getState().permission).toBe("denied");
+    expect(getState().permission).toBe("granted");
     expect(getState().lastError).toBe("service-not-allowed");
     expect(track).toHaveBeenCalledWith(
       "webspeech:session-error",

@@ -475,6 +475,23 @@ function useRecordedSpeechEngine(
       stopTracks();
     };
 
+    const isAbortError = (error: unknown) => {
+      const name = String(
+        (error as { name?: string } | null | undefined)?.name ?? ""
+      ).toLowerCase();
+      const code = String(
+        (error as { code?: string | number } | null | undefined)?.code ?? ""
+      ).toLowerCase();
+      const message = String(
+        (error as { message?: string } | null | undefined)?.message ?? ""
+      ).toLowerCase();
+      return (
+        name === "aborterror" ||
+        name === "domexception" && code === "20" ||
+        message.includes("aborted")
+      );
+    };
+
     const submit = async (
       sessionId: string,
       chunks: Blob[],
@@ -615,8 +632,14 @@ function useRecordedSpeechEngine(
           store.dispatch({ type: "EVT/END" });
           emit(`${opts.telemetryPrefix}:session-end`, { sessionId });
 
-          void submit(sessionId, chunks, currentMimeType, currentDeviceId)
-            .catch(fail)
+          void submit(sessionId, chunks, currentMimeType, currentDeviceId).catch(
+            (error) => {
+              if (isAbortError(error)) {
+                return;
+              }
+              fail(error);
+            }
+          )
             .finally(() => {
               if (activeSessionRef.current !== sessionId) {
                 return;

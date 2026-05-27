@@ -11,7 +11,10 @@ import {
   type LocalSpeechRecognitionClient,
   type RemoteSpeechRecognitionClient,
 } from "../src/engine/remoteSpeechRecognition.js";
-import { useSpeechRecognitionEngine } from "../src/engine/useSpeechRecognitionEngine.js";
+import {
+  isWebSpeechUnavailableError,
+  useSpeechRecognitionEngine,
+} from "../src/engine/useSpeechRecognitionEngine.js";
 
 type MediaRecorderEventHandler = ((event: Event) => void) | null;
 
@@ -82,6 +85,14 @@ describe("remote speech recognition fallback", () => {
     } else {
       delete (globalThis.navigator as any).gpu;
     }
+  });
+
+  it("identifies Web Speech unavailable errors without treating all errors as fallback-safe", () => {
+    expect(isWebSpeechUnavailableError()).toBe(false);
+    expect(isWebSpeechUnavailableError("network")).toBe(true);
+    expect(isWebSpeechUnavailableError("language-not-supported")).toBe(true);
+    expect(isWebSpeechUnavailableError("audio-capture")).toBe(true);
+    expect(isWebSpeechUnavailableError("permission-denied")).toBe(false);
   });
 
   it("posts recorded audio through the fetch remote recognition client", async () => {
@@ -180,6 +191,90 @@ describe("remote speech recognition fallback", () => {
     await waitFor(() => expect(localClient).toHaveBeenCalledTimes(1));
     expect(remoteClient).not.toHaveBeenCalled();
     expect(store.getState().transcript).toBe("local platform transcript");
+  });
+
+  it("honors explicit local recognition mode before remote recognition", async () => {
+    setSpeechRecognitionCtor(undefined);
+    const store = createGlobalVoiceStore();
+    const localClient: LocalSpeechRecognitionClient = vi.fn(async () => ({
+      transcript: "forced local transcript",
+    }));
+    const remoteClient: RemoteSpeechRecognitionClient = vi.fn(async () => ({
+      transcript: "remote transcript",
+    }));
+
+    const { result } = renderHook(() =>
+      useSpeechRecognitionEngine({
+        lang: "en-GB",
+        interim: false,
+        continuous: false,
+        mode: "local",
+        globalStore: store,
+        localRecognition: {
+          enabled: true,
+          client: localClient,
+        },
+        remoteRecognition: { enabled: true, client: remoteClient },
+      })
+    );
+
+    await act(async () => result.current.start());
+    await waitFor(() => expect(FakeMediaRecorder.instances).toHaveLength(1));
+    await act(async () => result.current.stop());
+
+    await waitFor(() => expect(localClient).toHaveBeenCalledTimes(1));
+    expect(remoteClient).not.toHaveBeenCalled();
+    expect(store.getState().transcript).toBe("forced local transcript");
+  });
+
+  it("honors explicit remote recognition mode while Web Speech is available", async () => {
+    const store = createGlobalVoiceStore();
+    const client: RemoteSpeechRecognitionClient = vi.fn(async () => ({
+      transcript: "forced remote transcript",
+    }));
+
+    const { result } = renderHook(() =>
+      useSpeechRecognitionEngine({
+        lang: "en-GB",
+        interim: false,
+        continuous: false,
+        mode: "remote",
+        globalStore: store,
+        remoteRecognition: { enabled: true, client },
+      })
+    );
+
+    await act(async () => result.current.start());
+    await waitFor(() => expect(FakeMediaRecorder.instances).toHaveLength(1));
+    await act(async () => result.current.stop());
+
+    await waitFor(() => expect(client).toHaveBeenCalledTimes(1));
+    expect(_getSRInstances()).toHaveLength(0);
+    expect(store.getState().transcript).toBe("forced remote transcript");
+  });
+
+  it("honors explicit Web Speech mode before configured remote recognition", async () => {
+    const store = createGlobalVoiceStore();
+    const client: RemoteSpeechRecognitionClient = vi.fn(async () => ({
+      transcript: "remote transcript",
+    }));
+
+    const { result } = renderHook(() =>
+      useSpeechRecognitionEngine({
+        lang: "en-GB",
+        interim: false,
+        continuous: false,
+        mode: "web-speech",
+        globalStore: store,
+        remoteRecognition: { enabled: true, client },
+      })
+    );
+
+    await act(async () => result.current.start());
+
+    expect(_getSRInstances()).toHaveLength(1);
+    expect(FakeMediaRecorder.instances).toHaveLength(0);
+    expect(client).not.toHaveBeenCalled();
   });
 
   it("skips WebGPU local recognition while rendering is using the GPU", async () => {

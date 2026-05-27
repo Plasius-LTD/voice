@@ -17,7 +17,7 @@ const contentTypes = {
   ".wasm": "application/wasm",
 };
 
-function resolveRequestPath(requestUrl) {
+export function resolveRequestPath(requestUrl) {
   const url = new URL(requestUrl || "/", "http://127.0.0.1");
   let pathname;
   try {
@@ -40,7 +40,7 @@ function resolveRequestPath(requestUrl) {
   return filePath;
 }
 
-async function sendFile(response, filePath) {
+export async function sendFile(response, filePath) {
   try {
     const body = await readFile(filePath);
     const extension = path.extname(filePath);
@@ -58,7 +58,7 @@ async function sendFile(response, filePath) {
   }
 }
 
-function createMudServer() {
+export function createMudServer() {
   return createServer((request, response) => {
     const filePath = resolveRequestPath(request.url);
     if (!filePath) {
@@ -71,7 +71,7 @@ function createMudServer() {
   });
 }
 
-function listen(port, maxPort = port + 25) {
+export function listen(port, maxPort = port + 25) {
   const server = createMudServer();
   server.on("error", (error) => {
     if (error.code === "EADDRINUSE" && port < maxPort) {
@@ -88,4 +88,6 @@ function listen(port, maxPort = port + 25) {
   });
 }
 
-listen(Number.isFinite(startPort) ? startPort : 4173);
+if (import.meta.url === pathToFileURL(path.resolve(process.argv[1] || "")).href) {
+  listen(Number.isFinite(startPort) ? startPort : 4173);
+}

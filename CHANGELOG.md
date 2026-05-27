@@ -12,10 +12,11 @@ The format is based on **[Keep a Changelog](https://keepachangelog.com/en/1.1.0/
   - (placeholder)
 
 - **Changed**
-  - (placeholder)
+  - Collapsed the legacy `temp/tests/` voice-intent corpus into the maintained `tests/` suite and kept the canonical registry coverage in `tests/useVoiceIntents.test.tsx`.
 
 - **Fixed**
   - Restored deterministic coverage for the Web Speech start-error recovery path so failed starts are verified to stop the stale recognizer, emit telemetry, and create a fresh session.
+  - Removed stale suppressed test files outside the active Vitest include path so lint, type, and coverage signals reflect the maintained suite only.
 
 - **Security**
   - (placeholder)

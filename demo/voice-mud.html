@@ -1,0 +1,388 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>@plasius/voice MUD demo</title>
+    <style>
+      :root {
+        color-scheme: dark;
+        --bg: #101416;
+        --panel: #182023;
+        --panel-strong: #202b2e;
+        --ink: #f1f5f2;
+        --muted: #adbbb5;
+        --line: #334145;
+        --accent: #95d5b2;
+        --accent-strong: #52b788;
+        --warn: #ffd166;
+        --error: #ff8fa3;
+        --shadow: rgba(0, 0, 0, 0.32);
+        font-family:
+          Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont,
+          "Segoe UI", sans-serif;
+      }
+
+      * {
+        box-sizing: border-box;
+      }
+
+      body {
+        min-height: 100vh;
+        margin: 0;
+        background:
+          radial-gradient(circle at 18% 10%, rgba(149, 213, 178, 0.12), transparent 26rem),
+          linear-gradient(135deg, #101416 0%, #172125 46%, #11171a 100%);
+        color: var(--ink);
+      }
+
+      button,
+      input {
+        font: inherit;
+      }
+
+      .app {
+        display: grid;
+        grid-template-columns: minmax(0, 1.55fr) minmax(19rem, 0.85fr);
+        gap: 1rem;
+        min-height: 100vh;
+        padding: clamp(1rem, 2vw, 1.75rem);
+      }
+
+      .main,
+      .side {
+        min-width: 0;
+      }
+
+      .topbar,
+      .panel,
+      .terminal {
+        border: 1px solid var(--line);
+        background: rgba(24, 32, 35, 0.88);
+        box-shadow: 0 1rem 2.5rem var(--shadow);
+      }
+
+      .topbar {
+        display: grid;
+        grid-template-columns: minmax(0, 1fr) auto;
+        align-items: center;
+        gap: 1rem;
+        min-height: 5.5rem;
+        padding: 1rem;
+        border-radius: 0.5rem;
+      }
+
+      h1,
+      h2,
+      p {
+        margin: 0;
+      }
+
+      h1 {
+        font-size: clamp(1.45rem, 2.4vw, 2.1rem);
+        line-height: 1.08;
+        letter-spacing: 0;
+      }
+
+      h2 {
+        font-size: 0.95rem;
+        letter-spacing: 0;
+      }
+
+      .subtle {
+        color: var(--muted);
+      }
+
+      .actions,
+      .chips,
+      .exits {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 0.5rem;
+      }
+
+      .button,
+      .chip {
+        min-height: 2.5rem;
+        border: 1px solid var(--line);
+        border-radius: 0.45rem;
+        background: var(--panel-strong);
+        color: var(--ink);
+        cursor: pointer;
+      }
+
+      .button {
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        gap: 0.45rem;
+        padding: 0.6rem 0.85rem;
+        white-space: nowrap;
+      }
+
+      .button.primary {
+        border-color: rgba(149, 213, 178, 0.85);
+        background: var(--accent-strong);
+        color: #06110b;
+        font-weight: 700;
+      }
+
+      .button:disabled,
+      .chip:disabled {
+        cursor: not-allowed;
+        opacity: 0.55;
+      }
+
+      .chip {
+        padding: 0.5rem 0.7rem;
+      }
+
+      .terminal {
+        display: flex;
+        flex-direction: column;
+        min-height: calc(100vh - 8rem);
+        margin-top: 1rem;
+        border-radius: 0.5rem;
+        overflow: hidden;
+      }
+
+      .terminal-header,
+      .status-grid {
+        display: grid;
+        gap: 0.75rem;
+      }
+
+      .terminal-header {
+        grid-template-columns: minmax(0, 1fr) auto;
+        align-items: center;
+        padding: 1rem;
+        border-bottom: 1px solid var(--line);
+      }
+
+      .log {
+        flex: 1;
+        min-height: 22rem;
+        max-height: calc(100vh - 18rem);
+        overflow-y: auto;
+        padding: 1rem;
+        background: rgba(7, 10, 11, 0.46);
+        font-family: "SFMono-Regular", Consolas, "Liberation Mono", monospace;
+        font-size: 0.95rem;
+        line-height: 1.55;
+      }
+
+      .log p + p {
+        margin-top: 0.55rem;
+      }
+
+      .log .command {
+        color: var(--accent);
+      }
+
+      .log .miss {
+        color: var(--warn);
+      }
+
+      .composer {
+        display: grid;
+        grid-template-columns: minmax(0, 1fr) auto;
+        gap: 0.75rem;
+        padding: 1rem;
+        border-top: 1px solid var(--line);
+      }
+
+      .composer input {
+        width: 100%;
+        min-height: 2.75rem;
+        border: 1px solid var(--line);
+        border-radius: 0.45rem;
+        padding: 0 0.85rem;
+        background: #0b1012;
+        color: var(--ink);
+      }
+
+      .side {
+        display: grid;
+        align-content: start;
+        gap: 1rem;
+      }
+
+      .panel {
+        padding: 1rem;
+        border-radius: 0.5rem;
+      }
+
+      .panel > * + * {
+        margin-top: 0.75rem;
+      }
+
+      .status-grid {
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+      }
+
+      .status {
+        min-height: 4.25rem;
+        padding: 0.7rem;
+        border: 1px solid var(--line);
+        border-radius: 0.45rem;
+        background: rgba(11, 16, 18, 0.64);
+      }
+
+      .status span {
+        display: block;
+        color: var(--muted);
+        font-size: 0.75rem;
+      }
+
+      .status strong {
+        display: block;
+        margin-top: 0.3rem;
+        overflow-wrap: anywhere;
+      }
+
+      .partial {
+        min-height: 3.2rem;
+        padding: 0.7rem;
+        border: 1px dashed var(--line);
+        border-radius: 0.45rem;
+        color: var(--muted);
+      }
+
+      .map {
+        display: grid;
+        grid-template-columns: repeat(3, minmax(0, 1fr));
+        gap: 0.45rem;
+      }
+
+      .room-node {
+        min-height: 3.6rem;
+        border: 1px solid var(--line);
+        border-radius: 0.45rem;
+        padding: 0.55rem;
+        background: rgba(11, 16, 18, 0.64);
+        color: var(--muted);
+        text-align: left;
+      }
+
+      .room-node.current {
+        border-color: var(--accent);
+        color: var(--ink);
+        background: rgba(82, 183, 136, 0.16);
+      }
+
+      .error {
+        color: var(--error);
+      }
+
+      .sr-only {
+        position: absolute;
+        width: 1px;
+        height: 1px;
+        padding: 0;
+        margin: -1px;
+        overflow: hidden;
+        clip: rect(0, 0, 0, 0);
+        white-space: nowrap;
+        border: 0;
+      }
+
+      @media (max-width: 860px) {
+        .app {
+          grid-template-columns: 1fr;
+        }
+
+        .terminal {
+          min-height: 38rem;
+        }
+
+        .topbar,
+        .terminal-header,
+        .composer {
+          grid-template-columns: 1fr;
+        }
+      }
+    </style>
+  </head>
+  <body>
+    <main class="app">
+      <section class="main" aria-labelledby="demo-title">
+        <header class="topbar">
+          <div>
+            <h1 id="demo-title">Voice MUD: Signal Tower</h1>
+            <p class="subtle">Browser speech navigation test bed for @plasius/voice.</p>
+          </div>
+          <div class="actions" aria-label="Voice controls">
+            <button id="startVoice" class="button primary" type="button">
+              Start voice
+            </button>
+            <button id="stopVoice" class="button" type="button" disabled>
+              Stop
+            </button>
+          </div>
+        </header>
+
+        <section class="terminal" aria-labelledby="terminal-title">
+          <div class="terminal-header">
+            <div>
+              <h2 id="terminal-title">Game log</h2>
+              <p id="statusLine" class="subtle" aria-live="polite"></p>
+            </div>
+            <div class="exits" id="exitButtons" aria-label="Available exits"></div>
+          </div>
+          <div id="gameLog" class="log" aria-live="polite" aria-relevant="additions"></div>
+          <form id="commandForm" class="composer" autocomplete="off">
+            <label class="sr-only" for="commandInput">Command</label>
+            <input
+              id="commandInput"
+              name="command"
+              type="text"
+              placeholder="Type or say: west, take key, east, take lantern, unlock gate..."
+            />
+            <button class="button primary" type="submit">Run</button>
+          </form>
+        </section>
+      </section>
+
+      <aside class="side" aria-label="Game state">
+        <section class="panel">
+          <h2>Voice</h2>
+          <div class="status-grid">
+            <div class="status">
+              <span>Microphone</span>
+              <strong id="micState">prompt</strong>
+            </div>
+            <div class="status">
+              <span>Recognizer</span>
+              <strong id="recognizerState">checking</strong>
+            </div>
+            <div class="status">
+              <span>Store</span>
+              <strong id="storeState">checking</strong>
+            </div>
+            <div class="status">
+              <span>Turns</span>
+              <strong id="turnState">0</strong>
+            </div>
+          </div>
+          <div id="partialText" class="partial" aria-live="polite">No speech yet.</div>
+        </section>
+
+        <section class="panel">
+          <h2>Commands</h2>
+          <div id="commandChips" class="chips" aria-label="Command shortcuts"></div>
+        </section>
+
+        <section class="panel">
+          <h2>Inventory</h2>
+          <p id="inventoryState" class="subtle">Empty</p>
+        </section>
+
+        <section class="panel">
+          <h2>Map</h2>
+          <div id="roomMap" class="map"></div>
+        </section>
+      </aside>
+    </main>
+    <script type="module" src="./voice-mud.js"></script>
+  </body>
+</html>

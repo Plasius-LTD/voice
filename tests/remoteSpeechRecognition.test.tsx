@@ -10,6 +10,7 @@ import {
   createFetchRemoteRecognitionClient,
   type LocalSpeechRecognitionClient,
   type RemoteSpeechRecognitionClient,
+  useRemoteSpeechEngine,
 } from "../src/engine/remoteSpeechRecognition.js";
 import {
   isWebSpeechUnavailableError,
@@ -21,10 +22,12 @@ type MediaRecorderEventHandler = ((event: Event) => void) | null;
 class FakeMediaRecorder {
   static instances: FakeMediaRecorder[] = [];
   static isTypeSupported = vi.fn((type: string) => type.includes("webm"));
+  static deferStop = false;
 
   readonly mimeType: string;
   readonly stream: MediaStream;
   state: RecordingState = "inactive";
+  stopCalls = 0;
   ondataavailable: ((event: { data: Blob }) => void) | null = null;
   onerror: MediaRecorderEventHandler = null;
   onstart: MediaRecorderEventHandler = null;
@@ -43,11 +46,16 @@ class FakeMediaRecorder {
 
   stop() {
     if (this.state === "inactive") return;
+    this.stopCalls += 1;
     this.state = "inactive";
     this.ondataavailable?.({
       data: new Blob(["captured audio"], { type: this.mimeType }),
     });
-    this.onstop?.(new Event("stop"));
+    if (FakeMediaRecorder.deferStop) {
+      queueMicrotask(() => this.onstop?.(new Event("stop")));
+    } else {
+      this.onstop?.(new Event("stop"));
+    }
   }
 }
 
@@ -71,6 +79,7 @@ describe("remote speech recognition fallback", () => {
       "gpu"
     );
     FakeMediaRecorder.instances = [];
+    FakeMediaRecorder.deferStop = false;
     FakeMediaRecorder.isTypeSupported.mockClear();
     (globalThis as any).MediaRecorder = FakeMediaRecorder;
     _clearSRInstances();
@@ -389,5 +398,190 @@ describe("remote speech recognition fallback", () => {
     } finally {
       startSpy.mockRestore();
     }
+  });
+
+  it("keeps equivalent inline remote config rerenders from restarting active recording", async () => {
+    setSpeechRecognitionCtor(undefined);
+    const store = createGlobalVoiceStore();
+    const client: RemoteSpeechRecognitionClient = vi.fn(async () => ({
+      transcript: "same session",
+    }));
+
+    const { result, rerender } = renderHook(({ revision }) => {
+      void revision;
+      return useRemoteSpeechEngine({
+        lang: "en-GB",
+        interim: false,
+        continuous: false,
+        globalStore: store,
+        remoteRecognition: { enabled: true, client, chunkMs: 4000 },
+      });
+    }, { initialProps: { revision: 1 } });
+
+    await act(async () => result.current.start());
+    await waitFor(() => expect(FakeMediaRecorder.instances).toHaveLength(1));
+    const [firstRecorder] = FakeMediaRecorder.instances;
+
+    rerender({ revision: 2 });
+    await act(async () => {});
+
+    expect(FakeMediaRecorder.instances).toHaveLength(1);
+    expect(firstRecorder?.state).toBe("recording");
+    expect(firstRecorder?.stopCalls).toBe(0);
+  });
+
+  it("restarts remote recording after an async device-change stop completes", async () => {
+    setSpeechRecognitionCtor(undefined);
+    FakeMediaRecorder.deferStop = true;
+    const store = createGlobalVoiceStore({ deviceId: "mic-1" });
+    const client: RemoteSpeechRecognitionClient = vi.fn(async () => ({
+      transcript: "device session",
+    }));
+
+    const { result } = renderHook(() =>
+      useRemoteSpeechEngine({
+        lang: "en-GB",
+        interim: false,
+        continuous: false,
+        globalStore: store,
+        remoteRecognition: { enabled: true, client },
+      })
+    );
+
+    await act(async () => result.current.start());
+    await waitFor(() => expect(FakeMediaRecorder.instances).toHaveLength(1));
+    const [firstRecorder] = FakeMediaRecorder.instances;
+
+    await act(async () => {
+      store.dispatch({
+        type: "EVT/DEVICE_CHANGED",
+        payload: { deviceId: "mic-2" },
+      });
+    });
+
+    expect(firstRecorder?.stopCalls).toBe(1);
+    await waitFor(() => expect(FakeMediaRecorder.instances).toHaveLength(2));
+    expect(FakeMediaRecorder.instances[1]?.state).toBe("recording");
+  });
+
+  it("ignores aborted remote submit failures during normal stop handling", async () => {
+    setSpeechRecognitionCtor(undefined);
+    const store = createGlobalVoiceStore();
+    const abortError = Object.assign(new Error("The operation was aborted."), {
+      name: "AbortError",
+    });
+    const client: RemoteSpeechRecognitionClient = vi.fn(async () => {
+      throw abortError;
+    });
+
+    const { result } = renderHook(() =>
+      useRemoteSpeechEngine({
+        lang: "en-GB",
+        interim: false,
+        continuous: false,
+        globalStore: store,
+        remoteRecognition: { enabled: true, client },
+      })
+    );
+
+    await act(async () => result.current.start());
+    await waitFor(() => expect(FakeMediaRecorder.instances).toHaveLength(1));
+    await act(async () => result.current.stop());
+
+    await waitFor(() => expect(client).toHaveBeenCalledTimes(1));
+    expect(store.getState().lastError).toBeUndefined();
+  });
+
+  it("disposes active remote recording without submitting buffered audio", async () => {
+    setSpeechRecognitionCtor(undefined);
+    const store = createGlobalVoiceStore();
+    const client: RemoteSpeechRecognitionClient = vi.fn(async () => ({
+      transcript: "should not submit",
+    }));
+
+    const { result } = renderHook(() =>
+      useRemoteSpeechEngine({
+        lang: "en-GB",
+        interim: false,
+        continuous: false,
+        globalStore: store,
+        remoteRecognition: { enabled: true, client },
+      })
+    );
+
+    await act(async () => result.current.start());
+    await waitFor(() => expect(FakeMediaRecorder.instances).toHaveLength(1));
+    const [recorder] = FakeMediaRecorder.instances;
+
+    await act(async () => result.current.dispose());
+    await act(async () => {});
+
+    expect(recorder?.stopCalls).toBe(1);
+    expect(client).not.toHaveBeenCalled();
+
+    result.current.reset();
+    expect(result.current.getLocalState()).toEqual({
+      sessionId: null,
+      startedAt: undefined,
+      endedAt: undefined,
+      lastError: undefined,
+    });
+  });
+
+  it("retries a failed local tier when the local recognizer config key changes", async () => {
+    setSpeechRecognitionCtor(undefined);
+    const store = createGlobalVoiceStore();
+    const failingLocalClient: LocalSpeechRecognitionClient = vi.fn(async () => {
+      throw new Error("local recognizer unavailable");
+    });
+    const repairedLocalClient: LocalSpeechRecognitionClient = vi.fn(async () => ({
+      transcript: "local repaired transcript",
+    }));
+    const remoteClient: RemoteSpeechRecognitionClient = vi.fn(async () => ({
+      transcript: "remote transcript",
+    }));
+
+    const { result, rerender } = renderHook(
+      ({ adapterName, localClient }) =>
+        useSpeechRecognitionEngine({
+          lang: "en-GB",
+          interim: false,
+          continuous: false,
+          globalStore: store,
+          localRecognition: {
+            enabled: true,
+            adapterName,
+            client: localClient,
+          },
+          remoteRecognition: { enabled: true, client: remoteClient },
+        }),
+      {
+        initialProps: {
+          adapterName: "native-v1",
+          localClient: failingLocalClient,
+        },
+      }
+    );
+
+    await act(async () => result.current.start());
+    await waitFor(() => expect(FakeMediaRecorder.instances).toHaveLength(1));
+    await act(async () => result.current.stop());
+    await waitFor(() =>
+      expect(store.getState().lastError).toContain("local recognizer unavailable")
+    );
+
+    rerender({
+      adapterName: "native-v2",
+      localClient: repairedLocalClient,
+    });
+    await act(async () => {});
+
+    await act(async () => result.current.start());
+    await waitFor(() => expect(FakeMediaRecorder.instances).toHaveLength(2));
+    await act(async () => result.current.stop());
+
+    await waitFor(() => expect(repairedLocalClient).toHaveBeenCalledTimes(1));
+    expect(remoteClient).not.toHaveBeenCalled();
+    expect(store.getState().transcript).toContain("local repaired transcript");
   });
 });

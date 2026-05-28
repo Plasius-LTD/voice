@@ -21,7 +21,10 @@ import { stopAndWait } from "./mocks/stopAndWait.mock.js";
 import { track } from "./mocks/telemetry.mock.js";
 
 import { useWebSpeechEngine } from "../src/engine/useWebSpeechEngine.js";
-import { globalVoiceStore } from "../src/stores/global.store.js";
+import {
+  createGlobalVoiceStore,
+  globalVoiceStore,
+} from "../src/stores/global.store.js";
 
 // ---------------------------
 // Minimal GlobalVoice store
@@ -186,6 +189,35 @@ describe("useWebSpeechEngine", () => {
 
     (globalThis as any).SpeechRecognition = oldSR;
     (globalThis as any).webkitSpeechRecognition = oldWebSR;
+  });
+
+  it("stops while disabled and starts again when re-enabled", async () => {
+    const store = createGlobalVoiceStore();
+    const { result, rerender } = renderHook(
+      ({ enabled }) =>
+        useWebSpeechEngine({
+          lang: "en-GB",
+          interim: false,
+          continuous: false,
+          enabled,
+          globalStore: store,
+        }),
+      { wrapper: Wrapper, initialProps: { enabled: true } }
+    );
+
+    await act(async () => result.current.start());
+    await act(async () => {});
+    expect(_getSRInstances()).toHaveLength(1);
+    const [firstRecognizer] = _getSRInstances();
+
+    rerender({ enabled: false });
+    await act(async () => {});
+    expect(stopAndWait).toHaveBeenCalledWith(firstRecognizer);
+
+    rerender({ enabled: true });
+    await act(async () => {});
+
+    expect(_getSRInstances()).toHaveLength(2);
   });
 
   it("reads permission via navigator.permissions.query when SR exists", async () => {

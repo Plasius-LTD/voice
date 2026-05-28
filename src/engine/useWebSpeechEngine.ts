@@ -129,6 +129,7 @@ type SRCtor = new () => SpeechRecognition;
 const getSRCtor = (): SRCtor | undefined =>
   ((globalThis as any).SpeechRecognition ||
     (globalThis as any).webkitSpeechRecognition) as SRCtor | undefined;
+let fallbackSessionCounter = 0;
 
 function applyConfigTo(rec: SpeechRecognition, store: GlobalVoiceStore) {
   const s = store.getState();
@@ -141,9 +142,18 @@ function applyConfigTo(rec: SpeechRecognition, store: GlobalVoiceStore) {
 // SR handler helpers
 // ──────────────────────────────────────────────────────────────────────────────
 function newSessionId() {
-  return (
-    globalThis.crypto?.randomUUID?.() ?? Math.random().toString(36).slice(2)
-  );
+  if (globalThis.crypto?.randomUUID) return globalThis.crypto.randomUUID();
+  if (globalThis.crypto?.getRandomValues) {
+    const bytes = new Uint8Array(16);
+    globalThis.crypto.getRandomValues(bytes);
+    return Array.from(bytes)
+      .map((value) => value.toString(16).padStart(2, "0"))
+      .join("");
+  }
+  fallbackSessionCounter += 1;
+  return `session-${Date.now().toString(36)}-${fallbackSessionCounter.toString(
+    36
+  )}`;
 }
 
 function onSRStart(rec: SpeechRecognition, actions: EngineActions) {

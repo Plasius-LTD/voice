@@ -11,6 +11,8 @@ import {
 import {
   isLocalSpeechRecognitionConfigured,
   isRemoteSpeechRecognitionConfigured,
+  getLocalSpeechRecognitionConfigKey,
+  getRemoteSpeechRecognitionConfigKey,
   useLocalSpeechEngine,
   useRemoteSpeechEngine,
   type LocalSpeechRecognitionConfig,
@@ -72,30 +74,53 @@ export function useSpeechRecognitionEngine(
   const remoteConfigured = isRemoteSpeechRecognitionConfigured(
     opts.remoteRecognition
   );
+  const localRecognitionKey = getLocalSpeechRecognitionConfigKey(
+    opts.localRecognition
+  );
+  const remoteRecognitionKey = getRemoteSpeechRecognitionConfigKey(
+    opts.remoteRecognition
+  );
   const previousModeRef = useRef<string | undefined>(undefined);
   const previousLocalConfiguredRef = useRef<boolean | undefined>(undefined);
   const previousRemoteConfiguredRef = useRef<boolean | undefined>(undefined);
   const previousHasWebSpeechRef = useRef<boolean | undefined>(undefined);
+  const previousLocalRecognitionKeyRef = useRef<string | undefined>(undefined);
+  const previousRemoteRecognitionKeyRef = useRef<string | undefined>(undefined);
 
   useEffect(() => {
     const modeChanged = previousModeRef.current !== mode;
     const localConfiguredChanged = previousLocalConfiguredRef.current !== localConfigured;
     const remoteConfiguredChanged = previousRemoteConfiguredRef.current !== remoteConfigured;
     const hasWebSpeechChanged = previousHasWebSpeechRef.current !== hasWebSpeech;
+    const localRecognitionChanged =
+      previousLocalRecognitionKeyRef.current !== localRecognitionKey;
+    const remoteRecognitionChanged =
+      previousRemoteRecognitionKeyRef.current !== remoteRecognitionKey;
 
     if (
       modeChanged ||
       localConfiguredChanged ||
       remoteConfiguredChanged ||
-      hasWebSpeechChanged
+      hasWebSpeechChanged ||
+      localRecognitionChanged ||
+      remoteRecognitionChanged
     ) {
       setFailedTiers({});
       previousModeRef.current = mode;
       previousLocalConfiguredRef.current = localConfigured;
       previousRemoteConfiguredRef.current = remoteConfigured;
       previousHasWebSpeechRef.current = hasWebSpeech;
+      previousLocalRecognitionKeyRef.current = localRecognitionKey;
+      previousRemoteRecognitionKeyRef.current = remoteRecognitionKey;
     }
-  }, [mode, localConfigured, remoteConfigured, hasWebSpeech]);
+  }, [
+    mode,
+    localConfigured,
+    remoteConfigured,
+    hasWebSpeech,
+    localRecognitionKey,
+    remoteRecognitionKey,
+  ]);
 
   const useLocal =
     mode === "local" ||

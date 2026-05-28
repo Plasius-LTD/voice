@@ -147,6 +147,11 @@ export type LocalSpeechEngineOptions = {
 };
 
 type RecorderCtor = typeof MediaRecorder;
+type StopRemoteOptions = {
+  submit?: boolean;
+  restart?: boolean;
+  emitEndWhenIdle?: boolean;
+};
 
 const DEFAULT_MIME_TYPES = [
   "audio/webm;codecs=opus",
@@ -173,6 +178,101 @@ const newSessionId = () =>
   Array.from(generateSecureRandomBytes())
     .map((value) => value.toString(16).padStart(2, "0"))
     .join("");
+
+const stableConfigValue = (value: unknown): string => {
+  if (value === undefined) return "undefined";
+  if (value === null) return "null";
+  if (value instanceof URL) return `url:${value.href}`;
+  if (typeof Headers !== "undefined" && value instanceof Headers) {
+    return stableConfigValue(Object.fromEntries([...value.entries()].sort()));
+  }
+  if (Array.isArray(value)) {
+    return `[${value.map((item) => stableConfigValue(item)).join(",")}]`;
+  }
+  if (typeof value === "function") return "[function]";
+  if (typeof value !== "object") return JSON.stringify(value);
+
+  return `{${Object.entries(value as Record<string, unknown>)
+    .sort(([left], [right]) => left.localeCompare(right))
+    .map(([key, item]) => `${key}:${stableConfigValue(item)}`)
+    .join(",")}}`;
+};
+
+const sharedRecognitionConfigKey = (
+  config?: RemoteSpeechRecognitionConfig | LocalSpeechRecognitionConfig
+) =>
+  stableConfigValue({
+    enabled: config?.enabled !== false,
+    chunkMs: config?.chunkMs,
+    maxRecordingMs: config?.maxRecordingMs,
+    mediaStreamConstraints: config?.mediaStreamConstraints,
+    mimeTypes: config?.mimeTypes,
+    recorderOptions: config?.recorderOptions,
+  });
+
+export const getRemoteSpeechRecognitionConfigKey = (
+  config?: RemoteSpeechRecognitionConfig
+) =>
+  stableConfigValue({
+    shared: sharedRecognitionConfigKey(config),
+    configured: isRemoteSpeechRecognitionConfigured(config),
+    endpoint: config?.endpoint ? String(config.endpoint) : undefined,
+    method: config?.method,
+    fieldName: config?.fieldName,
+    filename: config?.filename,
+    credentials: config?.credentials,
+    headers: config?.headers,
+    metadata: config?.metadata,
+    parseResponse: config?.parseResponse,
+    hasClient: !!config?.client,
+    hasFetch: !!config?.fetch,
+  });
+
+export const getLocalSpeechRecognitionConfigKey = (
+  config?: LocalSpeechRecognitionConfig
+) =>
+  stableConfigValue({
+    shared: sharedRecognitionConfigKey(config),
+    configured: isLocalSpeechRecognitionConfigured(config),
+    hasClient: !!config?.client,
+    executionTarget: config?.executionTarget,
+    adapterName: config?.adapterName,
+    available: (() => {
+      try {
+        return config?.isAvailable?.();
+      } catch {
+        return false;
+      }
+    })(),
+    gpuPolicy: {
+      allowDuringRendering: config?.gpuPolicy?.allowDuringRendering,
+      renderingActive: (() => {
+        try {
+          return config?.gpuPolicy?.isRenderingActive?.();
+        } catch {
+          return true;
+        }
+      })(),
+      maxRecordingMs: config?.gpuPolicy?.maxRecordingMs,
+    },
+  });
+
+const isAbortError = (error: unknown) => {
+  const name = String(
+    (error as { name?: string } | null | undefined)?.name ?? ""
+  ).toLowerCase();
+  const code = String(
+    (error as { code?: string | number } | null | undefined)?.code ?? ""
+  ).toLowerCase();
+  const message = String(
+    (error as { message?: string } | null | undefined)?.message ?? ""
+  ).toLowerCase();
+  return (
+    name === "aborterror" ||
+    (name === "domexception" && code === "20") ||
+    message.includes("aborted")
+  );
+};
 
 const emit = (name: string, props?: Record<string, unknown>) => {
   try {
@@ -379,7 +479,12 @@ function useRecordedSpeechEngine(
   const recognition = opts.recognition;
   const disposedRef = useRef(false);
   const enabledRef = useRef(enabled);
-  const stopRemoteRef = useRef<(() => void) | null>(null);
+  const clientRef = useRef(client);
+  const recognitionRef = useRef(recognition);
+  const defaultMaxRecordingMsRef = useRef(opts.defaultMaxRecordingMs);
+  const stopRemoteRef = useRef<((options?: StopRemoteOptions) => void) | null>(
+    null
+  );
   const cleanupsRef = useRef<(() => void)[]>([]);
   const recorderRef = useRef<MediaRecorder | null>(null);
   const streamRef = useRef<MediaStream | null>(null);
@@ -388,6 +493,8 @@ function useRecordedSpeechEngine(
   const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const activeSessionRef = useRef<string | null>(null);
   const startRequestRef = useRef(0);
+  const suppressedSubmitSessionsRef = useRef(new Set<string>());
+  const restartAfterStopRef = useRef(false);
   const localStateRef = useRef<EngineState>({
     sessionId: null,
     startedAt: undefined,
@@ -398,6 +505,11 @@ function useRecordedSpeechEngine(
   const updateLocal = (patch: Partial<EngineState>) => {
     localStateRef.current = { ...localStateRef.current, ...patch };
   };
+
+  enabledRef.current = enabled;
+  clientRef.current = client;
+  recognitionRef.current = recognition;
+  defaultMaxRecordingMsRef.current = opts.defaultMaxRecordingMs;
 
   useEffect(() => {
     if (!enabled) return;
@@ -465,6 +577,7 @@ function useRecordedSpeechEngine(
     };
 
     const fail = (error: unknown) => {
+      if (disposedRef.current || !enabledRef.current) return;
       const message = String((error as any)?.message ?? error);
       updateLocal({ lastError: message, endedAt: now() });
       store.dispatch({ type: "EVT/ERROR", payload: { error: message } });
@@ -481,14 +594,16 @@ function useRecordedSpeechEngine(
       mimeType?: string,
       deviceId?: string | null
     ) => {
-      if (!client) {
+      const activeClient = clientRef.current;
+      if (!activeClient) {
         throw new Error(opts.notConfiguredMessage);
       }
       if (!chunks.length) return;
 
       const audio = new Blob(chunks, { type: mimeType || chunks[0]?.type });
-      abortRef.current = new AbortController();
-      const result = await client({
+      const abort = new AbortController();
+      abortRef.current = abort;
+      const result = await activeClient({
         audio,
         lang: store.getState().lang,
         interim: store.getState().interim,
@@ -496,9 +611,13 @@ function useRecordedSpeechEngine(
         sessionId,
         mimeType: audio.type || mimeType,
         deviceId,
-        signal: abortRef.current.signal,
+        signal: abort.signal,
+      }).finally(() => {
+        if (abortRef.current === abort) abortRef.current = null;
       });
-      abortRef.current = null;
+      if (abort.signal.aborted || disposedRef.current || !enabledRef.current) {
+        return;
+      }
 
       const normalized = normalizeRemoteSpeechRecognitionResult(result);
       if (normalized.partial) {
@@ -534,13 +653,14 @@ function useRecordedSpeechEngine(
       const startRequest = ++startRequestRef.current;
       if (
         disposedRef.current ||
+        !enabledRef.current ||
         recorderRef.current ||
         state.muted ||
         state.permission === "denied"
       ) {
         return;
       }
-      if (!client) {
+      if (!clientRef.current) {
         fail(opts.notConfiguredMessage);
         return;
       }
@@ -559,15 +679,19 @@ function useRecordedSpeechEngine(
       const sessionId = newSessionId();
       const requestedDeviceId = state.deviceId ?? null;
       chunksRef.current = [];
+      const currentRecognition = recognitionRef.current;
 
       try {
         const stream = await mediaDevices.getUserMedia(
-          resolveConstraints(state, recognition)
+          resolveConstraints(state, currentRecognition)
         );
+        const currentState = store.getState();
         if (
           startRequestRef.current !== startRequest ||
           disposedRef.current ||
-          !store.getState().wantListening
+          !enabledRef.current ||
+          !currentState.wantListening ||
+          currentState.deviceId !== requestedDeviceId
         ) {
           for (const track of stream.getTracks()) track.stop();
           return;
@@ -575,9 +699,9 @@ function useRecordedSpeechEngine(
 
         activeSessionRef.current = sessionId;
         streamRef.current = stream;
-        const mimeType = selectMimeType(recognition);
+        const mimeType = selectMimeType(currentRecognition);
         const recorderOptions = {
-          ...recognition?.recorderOptions,
+          ...currentRecognition?.recorderOptions,
           ...(mimeType ? { mimeType } : {}),
         };
         const recorder = new MR(stream, recorderOptions);
@@ -610,18 +734,41 @@ function useRecordedSpeechEngine(
           const currentMimeType = recorder.mimeType || mimeType;
           const currentDeviceId = requestedDeviceId;
           recorderRef.current = null;
+          activeSessionRef.current = null;
           stopTracks();
           updateLocal({ endedAt: now() });
           store.dispatch({ type: "EVT/END" });
           emit(`${opts.telemetryPrefix}:session-end`, { sessionId });
 
-          void submit(sessionId, chunks, currentMimeType, currentDeviceId)
-            .catch(fail)
+          const shouldSubmit = !suppressedSubmitSessionsRef.current.delete(
+            sessionId
+          );
+          const restartAfterStop = restartAfterStopRef.current;
+          restartAfterStopRef.current = false;
+
+          if (
+            restartAfterStop &&
+            !disposedRef.current &&
+            enabledRef.current &&
+            store.getState().wantListening &&
+            !store.getState().muted
+          ) {
+            void startRemote();
+          }
+
+          const submitPromise = shouldSubmit
+            ? submit(sessionId, chunks, currentMimeType, currentDeviceId).catch(
+                (error) => {
+                  if (isAbortError(error)) return;
+                  fail(error);
+                }
+              )
+            : Promise.resolve();
+
+          void submitPromise
             .finally(() => {
-              if (activeSessionRef.current !== sessionId) {
-                return;
-              }
               if (
+                !recorderRef.current &&
                 !disposedRef.current &&
                 enabledRef.current &&
                 store.getState().continuous &&
@@ -633,12 +780,13 @@ function useRecordedSpeechEngine(
         };
 
         recorder.start();
-        const maxRecordingMs =
-          opts.defaultMaxRecordingMs ?? getMaxRecordingMs(recognition);
-        if (store.getState().continuous || maxRecordingMs) {
+        const currentMaxRecordingMs =
+          defaultMaxRecordingMsRef.current ??
+          getMaxRecordingMs(currentRecognition);
+        if (store.getState().continuous || currentMaxRecordingMs) {
           const chunkMs = Math.max(
             1000,
-            maxRecordingMs ?? recognition?.chunkMs ?? 10_000
+            currentMaxRecordingMs ?? currentRecognition?.chunkMs ?? 10_000
           );
           timerRef.current = setTimeout(() => {
             if (recorderRef.current?.state === "recording") {
@@ -657,7 +805,12 @@ function useRecordedSpeechEngine(
       }
     };
 
-    const stopRemote = () => {
+    const stopRemote = (options: StopRemoteOptions = {}) => {
+      const activeSessionId = activeSessionRef.current;
+      if (activeSessionId && options.submit === false) {
+        suppressedSubmitSessionsRef.current.add(activeSessionId);
+      }
+      if (options.restart) restartAfterStopRef.current = true;
       startRequestRef.current += 1;
       clearChunkTimer();
       abortRef.current?.abort();
@@ -668,8 +821,20 @@ function useRecordedSpeechEngine(
         return;
       }
       recorderRef.current = null;
+      activeSessionRef.current = null;
       stopTracks();
-      store.dispatch({ type: "EVT/END" });
+      if (store.getState().listening || options.emitEndWhenIdle) {
+        store.dispatch({ type: "EVT/END" });
+      }
+      if (
+        options.restart &&
+        !disposedRef.current &&
+        enabledRef.current &&
+        store.getState().wantListening &&
+        !store.getState().muted
+      ) {
+        void startRemote();
+      }
     };
     stopRemoteRef.current = stopRemote;
 
@@ -689,8 +854,7 @@ function useRecordedSpeechEngine(
     localCleanups.push(unsubMuted);
     const unsubDevice = store.subscribeToKey("deviceId", () => {
       if (store.getState().wantListening) {
-        stopRemote();
-        void startRemote();
+        stopRemote({ restart: true });
       }
     });
     localCleanups.push(unsubDevice);
@@ -703,16 +867,13 @@ function useRecordedSpeechEngine(
           cleanup();
         } catch {}
       }
-      stopRemote();
+      stopRemote({ submit: false });
     };
   }, [
-    client,
     enabled,
-    opts.defaultMaxRecordingMs,
     opts.notConfiguredMessage,
     opts.telemetryPrefix,
     opts.unsupportedMessage,
-    recognition,
     store,
   ]);
 
@@ -725,7 +886,7 @@ function useRecordedSpeechEngine(
         store.dispatch({ type: "REQ/STOP" });
       },
       dispose() {
-        stopRemoteRef.current?.();
+        stopRemoteRef.current?.({ submit: false });
         disposedRef.current = true;
         store.dispatch({ type: "REQ/STOP" });
         abortRef.current?.abort();

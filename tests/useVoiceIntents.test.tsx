@@ -119,6 +119,70 @@ describe("useVoiceIntents", () => {
       expect.objectContaining({ phase: "start", origin: "page" })
     );
   });
+
+  it("falls back to global registered handlers when no origin-scoped handler exists", async () => {
+    const { useVoiceIntents, store } = await loadModules();
+    const activate = vi.fn();
+    const globalHandler = vi.fn().mockReturnValue("success");
+
+    const { result, unmount } = renderHook(() =>
+      useVoiceIntents({ origin: "profile", lang: "en-US", activate })
+    );
+
+    act(() =>
+      result.current.registerGlobalIntents([
+        { name: "cart.addItem", patterns: ["add to cart"], handler: globalHandler },
+      ])
+    );
+
+    act(() => {
+      store.dispatch({ type: "EVT/START" });
+      store.dispatch({ type: "EVT/FINAL", payload: { text: "add to cart three" } });
+    });
+
+    await waitFor(() => expect(globalHandler).toHaveBeenCalledTimes(1));
+    expect(activate).not.toHaveBeenCalled();
+    expect(trackSpy).toHaveBeenCalledWith("ui.voice", expect.objectContaining({
+      phase: "intent",
+      intent: "cart.addItem",
+    }));
+    unmount();
+  });
+
+  it("supports partial unregister while preserving other registered intents", async () => {
+    const { useVoiceIntents, getRegisteredIntentNames } = await loadModules();
+
+    const { result, unmount } = renderHook(() =>
+      useVoiceIntents({ origin: "shop", lang: "en-US" })
+    );
+
+    act(() =>
+      result.current.registerVoiceIntents("shop", [
+        { name: "cart.addItem", patterns: ["add"], handler: vi.fn() },
+        { name: "cart.removeItem", patterns: ["remove"], handler: vi.fn() },
+      ])
+    );
+    act(() =>
+      result.current.registerGlobalIntents([
+        { name: "help.open", patterns: ["help"], handler: vi.fn() },
+      ])
+    );
+
+    expect(getRegisteredIntentNames("shop")).toEqual(
+      expect.arrayContaining(["cart.addItem", "cart.removeItem", "help.open"])
+    );
+
+    act(() => result.current.unregisterVoiceIntents("shop", ["cart.removeItem"]));
+
+    expect(getRegisteredIntentNames("shop")).toEqual(
+      expect.arrayContaining(["cart.addItem", "help.open"])
+    );
+    expect(getRegisteredIntentNames("shop")).not.toEqual(
+      expect.arrayContaining(["cart.removeItem"])
+    );
+
+    unmount();
+  });
 });
 
 describe("VoiceIntents component", () => {

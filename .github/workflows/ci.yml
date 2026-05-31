@@ -24,6 +24,8 @@ jobs:
       - name: Prefer idle self-hosted runner
         id: select
         uses: actions/github-script@v9
+        env:
+          RUNNER_SELECTOR_TOKEN_AVAILABLE: ${{ secrets.RUNNER_SELECTOR_TOKEN != '' }}
         with:
           github-token: ${{ secrets.RUNNER_SELECTOR_TOKEN || github.token }}
           script: |
@@ -33,6 +35,12 @@ jobs:
 
             if (context.eventName === "pull_request") {
               core.info(`Pull request CI always uses ${fallbackRunner}.`)
+              core.setOutput("runner_labels", selectedRunnerJson)
+              return
+            }
+
+            if (process.env.RUNNER_SELECTOR_TOKEN_AVAILABLE !== "true") {
+              core.info("RUNNER_SELECTOR_TOKEN is not configured; using the hosted fallback runner.")
               core.setOutput("runner_labels", selectedRunnerJson)
               return
             }

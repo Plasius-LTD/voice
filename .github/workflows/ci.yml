@@ -31,6 +31,12 @@ jobs:
             const fallbackRunner = process.env.FALLBACK_RUNNER_LABEL
             let selectedRunnerJson = JSON.stringify(fallbackRunner)
 
+            if (context.eventName === "pull_request") {
+              core.info(`Pull request CI always uses ${fallbackRunner}.`)
+              core.setOutput("runner_labels", selectedRunnerJson)
+              return
+            }
+
             try {
               const runners = await github.paginate(
                 github.rest.actions.listSelfHostedRunnersForRepo,

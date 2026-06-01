@@ -72,10 +72,10 @@ export function useSpeechRecognitionEngine(
   const remoteConfigured = isRemoteSpeechRecognitionConfigured(
     opts.remoteRecognition
   );
-  const previousModeRef = useRef<string | undefined>();
-  const previousLocalConfiguredRef = useRef<boolean | undefined>();
-  const previousRemoteConfiguredRef = useRef<boolean | undefined>();
-  const previousHasWebSpeechRef = useRef<boolean | undefined>();
+  const previousModeRef = useRef<string | undefined>(undefined);
+  const previousLocalConfiguredRef = useRef<boolean | undefined>(undefined);
+  const previousRemoteConfiguredRef = useRef<boolean | undefined>(undefined);
+  const previousHasWebSpeechRef = useRef<boolean | undefined>(undefined);
 
   useEffect(() => {
     const modeChanged = previousModeRef.current !== mode;

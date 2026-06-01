@@ -6,9 +6,69 @@ on:
   pull_request:
     branches: [main]
 
+permissions:
+  actions: read
+  contents: read
+
+env:
+  FALLBACK_RUNNER_LABEL: ubuntu-latest
+  SELF_HOSTED_RUNNER_LABELS: '["self-hosted","Linux","X64"]'
+
 jobs:
-  build-test:
+  select-runner:
+    name: Select runner
     runs-on: ubuntu-latest
+    outputs:
+      runner_labels: ${{ steps.select.outputs.runner_labels }}
+    steps:
+      - name: Prefer idle self-hosted runner
+        id: select
+        uses: actions/github-script@v9
+        with:
+          github-token: ${{ secrets.RUNNER_SELECTOR_TOKEN || github.token }}
+          script: |
+            const selfHostedLabels = JSON.parse(process.env.SELF_HOSTED_RUNNER_LABELS)
+            const fallbackRunner = process.env.FALLBACK_RUNNER_LABEL
+            let selectedRunnerJson = JSON.stringify(fallbackRunner)
+
+            try {
+              const runners = await github.paginate(
+                github.rest.actions.listSelfHostedRunnersForRepo,
+                {
+                  owner: context.repo.owner,
+                  repo: context.repo.repo,
+                  per_page: 100,
+                }
+              )
+
+              const hasMatchingIdleRunner = runners.some((runner) => {
+                const labels = new Set((runner.labels || []).map((label) => label.name))
+                return (
+                  runner.status === "online" &&
+                  runner.busy === false &&
+                  selfHostedLabels.every((label) => labels.has(label))
+                )
+              })
+
+              if (hasMatchingIdleRunner) {
+                selectedRunnerJson = JSON.stringify(selfHostedLabels)
+                core.info(`Selected self-hosted runner labels ${selfHostedLabels.join(", ")}.`)
+              } else {
+                core.info(
+                  `No idle self-hosted runner with labels ${selfHostedLabels.join(", ")} was found; falling back to ${fallbackRunner}.`
+                )
+              }
+            } catch (error) {
+              core.warning(
+                `Could not inspect self-hosted runners; falling back to ${fallbackRunner}. ${error.message}`
+              )
+            }
+
+            core.setOutput("runner_labels", selectedRunnerJson)
+
+  build-test:
+    needs: select-runner
+    runs-on: ${{ fromJSON(needs.select-runner.outputs.runner_labels) }}
     steps:
       - uses: actions/checkout@v4
 

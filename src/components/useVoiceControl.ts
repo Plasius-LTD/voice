@@ -3,14 +3,7 @@ import { track } from "@plasius/nfr";
 import type { GlobalVoiceStore } from "../stores/global.store.js";
 import { globalVoiceStore as defaultGlobalVoiceStore } from "../stores/global.store.js";
 import type { WebSpeechEngine } from "../engine/useWebSpeechEngine.js";
-import {
-  useSpeechRecognitionEngine,
-  type SpeechRecognitionEngineMode,
-} from "../engine/useSpeechRecognitionEngine.js";
-import type {
-  LocalSpeechRecognitionConfig,
-  RemoteSpeechRecognitionConfig,
-} from "../engine/remoteSpeechRecognition.js";
+import { useWebSpeechEngine } from "../engine/useWebSpeechEngine.js";
 
 /**
  * Options for the Voice Control hook.
@@ -69,14 +62,7 @@ export type UseVoiceControlOptions = {
   /**
    * Engine configuration passthrough (initial language/config).
    */
-  engineConfig?: {
-    lang?: string;
-    interim?: boolean;
-    continuous?: boolean;
-    mode?: SpeechRecognitionEngineMode;
-    localRecognition?: LocalSpeechRecognitionConfig;
-    remoteRecognition?: RemoteSpeechRecognitionConfig;
-  };
+  engineConfig?: { lang?: string; interim?: boolean; continuous?: boolean };
 };
 
 export type VoiceControlAPI = {
@@ -148,14 +134,10 @@ export function useVoiceControl(
   // Create (or reuse injected) engine that uses the same global store
   const voiceEngine: WebSpeechEngine =
     engine ??
-    useSpeechRecognitionEngine({
+    useWebSpeechEngine({
       lang: engineConfig.lang ?? (globalStore.getState().lang || "en-GB"),
       interim: !!engineConfig.interim,
       continuous: !!engineConfig.continuous,
-      mode: engineConfig.mode,
-      localRecognition: engineConfig.localRecognition,
-      remoteRecognition: engineConfig.remoteRecognition,
-      globalStore,
     });
 
   // --- Global input listeners (optional) --------------------------------------

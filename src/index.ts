@@ -18,39 +18,10 @@ export type {
   VoiceIntentsProps,
 } from "./components/voiceIntents.js";
 export {
-  createGlobalVoiceStore,
   globalVoiceStore,
   type GlobalVoiceStore,
 } from "./stores/global.store.js";
 export {
   useWebSpeechEngine,
   type WebSpeechEngine,
-  type WebSpeechEngineOptions,
 } from "./engine/useWebSpeechEngine.js";
-export {
-  useSpeechRecognitionEngine,
-  isWebSpeechUnavailableError,
-  type SpeechRecognitionEngineMode,
-  type SpeechRecognitionEngineOptions,
-} from "./engine/useSpeechRecognitionEngine.js";
-export {
-  useLocalSpeechEngine,
-  useRemoteSpeechEngine,
-  createFetchRemoteRecognitionClient,
-  isLocalSpeechRecognitionConfigured,
-  isRemoteSpeechRecognitionConfigured,
-  normalizeRemoteSpeechRecognitionResult,
-  type LocalSpeechEngineOptions,
-  type LocalSpeechRecognitionConfig,
-  type LocalSpeechRecognitionClient,
-  type LocalSpeechRecognitionExecutionTarget,
-  type LocalSpeechRecognitionGpuPolicy,
-  type LocalSpeechRecognitionRequest,
-  type LocalSpeechRecognitionResult,
-  type RemoteSpeechEngineOptions,
-  type RemoteSpeechRecognitionClient,
-  type RemoteSpeechRecognitionConfig,
-  type RemoteSpeechRecognitionRequest,
-  type RemoteSpeechRecognitionResult,
-  type FetchRemoteRecognitionClientOptions,
-} from "./engine/remoteSpeechRecognition.js";

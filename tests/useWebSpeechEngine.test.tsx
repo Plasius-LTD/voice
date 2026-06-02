@@ -21,10 +21,7 @@ import { stopAndWait } from "./mocks/stopAndWait.mock.js";
 import { track } from "./mocks/telemetry.mock.js";
 
 import { useWebSpeechEngine } from "../src/engine/useWebSpeechEngine.js";
-import {
-  createGlobalVoiceStore,
-  globalVoiceStore,
-} from "../src/stores/global.store.js";
+import { globalVoiceStore } from "../src/stores/global.store.js";
 
 // ---------------------------
 // Minimal GlobalVoice store
@@ -189,35 +186,6 @@ describe("useWebSpeechEngine", () => {
 
     (globalThis as any).SpeechRecognition = oldSR;
     (globalThis as any).webkitSpeechRecognition = oldWebSR;
-  });
-
-  it("stops while disabled and starts again when re-enabled", async () => {
-    const store = createGlobalVoiceStore();
-    const { result, rerender } = renderHook(
-      ({ enabled }) =>
-        useWebSpeechEngine({
-          lang: "en-GB",
-          interim: false,
-          continuous: false,
-          enabled,
-          globalStore: store,
-        }),
-      { wrapper: Wrapper, initialProps: { enabled: true } }
-    );
-
-    await act(async () => result.current.start());
-    await act(async () => {});
-    expect(_getSRInstances()).toHaveLength(1);
-    const [firstRecognizer] = _getSRInstances();
-
-    rerender({ enabled: false });
-    await act(async () => {});
-    expect(stopAndWait).toHaveBeenCalledWith(firstRecognizer);
-
-    rerender({ enabled: true });
-    await act(async () => {});
-
-    expect(_getSRInstances()).toHaveLength(2);
   });
 
   it("reads permission via navigator.permissions.query when SR exists", async () => {
@@ -512,13 +480,13 @@ describe("useWebSpeechEngine", () => {
     const [sr] = _getSRInstances();
     expect(sr).toBeTruthy();
 
-    // service-not-allowed is a Web Speech service failure, not a microphone denial.
+    // fatal error (service-not-allowed) should set permission denied
     await act(async () => {
       (sr as any).emitError({ error: "service-not-allowed" });
     });
 
     await act(async () => {});
-    expect(getState().permission).toBe("granted");
+    expect(getState().permission).toBe("denied");
     expect(getState().lastError).toBe("service-not-allowed");
     expect(track).toHaveBeenCalledWith(
       "webspeech:session-error",

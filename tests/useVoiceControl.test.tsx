@@ -10,8 +10,8 @@ vi.mock("@plasius/nfr", () => ({
   track: (...args: any[]) => trackSpy(...args),
 }));
 
-vi.mock("../src/engine/useSpeechRecognitionEngine.js", () => ({
-  useSpeechRecognitionEngine: () => mockEngine,
+vi.mock("../src/engine/useWebSpeechEngine.js", () => ({
+  useWebSpeechEngine: () => mockEngine,
 }));
 
 describe("useVoiceControl", () => {

@@ -3,33 +3,32 @@ import { track } from "@plasius/nfr";
 import { createStore } from "@plasius/react-state";
 import { stopAndWait } from "../utils/stopAndWait.js";
 import {
-  globalVoiceStore as defaultGlobalVoiceStore,
+  globalVoiceStore as gStore,
   GlobalVoiceState,
-  type GlobalVoiceStore,
 } from "../stores/global.store.js";
 
 // ──────────────────────────────────────────────────────────────────────────────
 // Action creators (thin helpers for readability & testability)
 // ──────────────────────────────────────────────────────────────────────────────
-const createActions = (store: GlobalVoiceStore) => ({
+const A = {
   reqStart: (
     payload?: Partial<{ lang: string; interim: boolean; continuous: boolean }>
-  ) => store.dispatch({ type: "REQ/START", payload }),
-  reqStop: () => store.dispatch({ type: "REQ/STOP" }),
+  ) => gStore.dispatch({ type: "REQ/START", payload }),
+  reqStop: () => gStore.dispatch({ type: "REQ/STOP" }),
   setConfig: (lang: string, interim: boolean, continuous: boolean) =>
-    store.dispatch({
+    gStore.dispatch({
       type: "INT/SET_CONFIG",
       payload: { lang, interim, continuous },
     }),
   setPermission: (permission: any) =>
-    store.dispatch({ type: "INT/SET_PERMISSIONS", payload: { permission } }),
+    gStore.dispatch({ type: "INT/SET_PERMISSIONS", payload: { permission } }),
   deviceList: (deviceList: MediaDeviceInfo[]) =>
-    store.dispatch({
+    gStore.dispatch({
       type: "EVT/DEVICE_LIST_CHANGED",
       payload: { deviceList },
     }),
   deviceChanged: (deviceId: string | null) =>
-    store.dispatch({ type: "EVT/DEVICE_CHANGED", payload: { deviceId } }),
+    gStore.dispatch({ type: "EVT/DEVICE_CHANGED", payload: { deviceId } }),
   startEvt: (sessionId: string, startedAt: number) =>
     engineStore.dispatch({
       type: "EVT/START",
@@ -41,14 +40,12 @@ const createActions = (store: GlobalVoiceStore) => ({
     engineStore.dispatch({ type: "EVT/ERROR", payload: { error } }),
   resetLocal: () => engineStore.dispatch({ type: "INT/RESET" }),
   partial: (text: string) =>
-    store.dispatch({ type: "EVT/PARTIAL", payload: { text } }),
+    gStore.dispatch({ type: "EVT/PARTIAL", payload: { text } }),
   final: (text: string) =>
-    store.dispatch({ type: "EVT/FINAL", payload: { text } }),
-  startFlag: () => store.dispatch({ type: "EVT/START" }),
-  endFlag: () => store.dispatch({ type: "EVT/END" }),
-});
-
-type EngineActions = ReturnType<typeof createActions>;
+    gStore.dispatch({ type: "EVT/FINAL", payload: { text } }),
+  startFlag: () => gStore.dispatch({ type: "EVT/START" }),
+  endFlag: () => gStore.dispatch({ type: "EVT/END" }),
+};
 
 const emit = (name: string, props?: Record<string, unknown>) => {
   try {
@@ -129,10 +126,9 @@ type SRCtor = new () => SpeechRecognition;
 const getSRCtor = (): SRCtor | undefined =>
   ((globalThis as any).SpeechRecognition ||
     (globalThis as any).webkitSpeechRecognition) as SRCtor | undefined;
-let fallbackSessionCounter = 0;
 
-function applyConfigTo(rec: SpeechRecognition, store: GlobalVoiceStore) {
-  const s = store.getState();
+function applyConfigTo(rec: SpeechRecognition) {
+  const s = gStore.getState();
   rec.lang = s.lang;
   rec.interimResults = !!s.interim;
   (rec as any).continuous = !!s.continuous;
@@ -142,46 +138,32 @@ function applyConfigTo(rec: SpeechRecognition, store: GlobalVoiceStore) {
 // SR handler helpers
 // ──────────────────────────────────────────────────────────────────────────────
 function newSessionId() {
-  if (globalThis.crypto?.randomUUID) return globalThis.crypto.randomUUID();
-  if (globalThis.crypto?.getRandomValues) {
-    const bytes = new Uint8Array(16);
-    globalThis.crypto.getRandomValues(bytes);
-    return Array.from(bytes)
-      .map((value) => value.toString(16).padStart(2, "0"))
-      .join("");
-  }
-  fallbackSessionCounter += 1;
-  return `session-${Date.now().toString(36)}-${fallbackSessionCounter.toString(
-    36
-  )}`;
+  return (
+    globalThis.crypto?.randomUUID?.() ?? Math.random().toString(36).slice(2)
+  );
 }
 
-function onSRStart(rec: SpeechRecognition, actions: EngineActions) {
+function onSRStart(rec: SpeechRecognition) {
   const sessionId = newSessionId();
   (rec as any).__sessionId = sessionId;
   (rec as any).__cursor = 0;
-  actions.startEvt(sessionId, (performance as any)?.now?.() ?? Date.now());
-  actions.startFlag();
+  A.startEvt(sessionId, (performance as any)?.now?.() ?? Date.now());
+  A.startFlag();
   emit("webspeech:session-start", { lang: (rec as any).lang, sessionId });
 }
 
-function onSRError(
-  rec: SpeechRecognition,
-  err: any,
-  actions: EngineActions,
-  store: GlobalVoiceStore
-) {
+function onSRError(rec: SpeechRecognition, err: any) {
   const error = String(err?.error ?? err?.name ?? err ?? "unknown");
-  const permissionDenied =
+  const fatal =
     error === "not-allowed" ||
+    error === "service-not-allowed" ||
     error === "NotAllowedError";
-  const fatal = permissionDenied || error === "service-not-allowed";
 
-  actions.errorEvt(error);
-  store.dispatch({ type: "EVT/ERROR", payload: { error } });
+  A.errorEvt(error);
+  gStore.dispatch({ type: "EVT/ERROR", payload: { error } });
 
-  if (permissionDenied) {
-    actions.setPermission("denied"); // force global store to denied
+  if (fatal) {
+    A.setPermission("denied"); // force global store to denied
   }
 
   emit("webspeech:session-error", {
@@ -192,9 +174,9 @@ function onSRError(
   });
 }
 
-function onSREnd(rec: SpeechRecognition, actions: EngineActions) {
-  actions.endEvt((performance as any)?.now?.() ?? Date.now());
-  actions.endFlag();
+function onSREnd(rec: SpeechRecognition) {
+  A.endEvt((performance as any)?.now?.() ?? Date.now());
+  A.endFlag();
   emit("webspeech:session-end", {
     lang: (rec as any).lang,
     sessionId: (rec as any).__sessionId,
@@ -225,11 +207,11 @@ function extractTexts(ev: any, rec: SpeechRecognition) {
   };
 }
 
-function onSRResult(rec: SpeechRecognition, ev: any, actions: EngineActions) {
+function onSRResult(rec: SpeechRecognition, ev: any) {
   const { interim, final } = extractTexts(ev, rec);
   if (interim && interim !== (rec as any).__lastInterim) {
     (rec as any).__lastInterim = interim;
-    actions.partial(interim);
+    A.partial(interim);
     emit("webspeech:session-partial", {
       lang: (rec as any).lang,
       sessionId: (rec as any).__sessionId,
@@ -237,7 +219,7 @@ function onSRResult(rec: SpeechRecognition, ev: any, actions: EngineActions) {
   }
   if (final && final !== (rec as any).__lastFinal) {
     (rec as any).__lastFinal = final;
-    actions.final(final);
+    A.final(final);
     emit("webspeech:session-final", {
       lang: (rec as any).lang,
       sessionId: (rec as any).__sessionId,
@@ -248,40 +230,22 @@ function onSRResult(rec: SpeechRecognition, ev: any, actions: EngineActions) {
 // ──────────────────────────────────────────────────────────────────────────────
 // Hook
 // ──────────────────────────────────────────────────────────────────────────────
-export type WebSpeechEngineOptions = {
+export function useWebSpeechEngine(opts: {
   lang: string;
   interim: boolean;
   continuous: boolean;
-  enabled?: boolean;
-  globalStore?: GlobalVoiceStore;
-};
-
-export function useWebSpeechEngine(opts: WebSpeechEngineOptions): WebSpeechEngine {
-  const store = opts.globalStore ?? defaultGlobalVoiceStore;
-  const actions = useMemo(() => createActions(store), [store]);
+}): WebSpeechEngine {
   const recRef = useRef<SpeechRecognition | null>(null);
   const disposedRef = useRef(false);
-  const wasEnabledRef = useRef(false);
   const cleanupsRef = useRef<(() => void)[]>([]);
-  const enabled = opts.enabled ?? true;
 
   // 1) Push option changes into the global store (no implicit start/stop)
   useEffect(() => {
-    if (!enabled) return;
-    actions.setConfig(opts.lang, !!opts.interim, !!opts.continuous);
-  }, [actions, enabled, opts.lang, opts.interim, opts.continuous]);
-
-  // Reset a temporary disable disposal gate when web speech is re-enabled.
-  useEffect(() => {
-    if (!wasEnabledRef.current && enabled) {
-      disposedRef.current = false;
-    }
-    wasEnabledRef.current = enabled;
-  }, [enabled]);
+    A.setConfig(opts.lang, !!opts.interim, !!opts.continuous);
+  }, [opts.lang, opts.interim, opts.continuous]);
 
   // 2) One-time environment wiring: device watcher + permissions probe
   useEffect(() => {
-    if (!enabled) return;
     if (disposedRef.current) return;
 
     const localCleanups: (() => void)[] = [];
@@ -294,12 +258,12 @@ export function useWebSpeechEngine(opts: WebSpeechEngineOptions): WebSpeechEngin
       try {
         const devices = await navigator.mediaDevices.enumerateDevices();
         const list = devices.filter((d) => d.kind === "audioinput");
-        actions.deviceList(list);
+        A.deviceList(list);
 
-        const current = store.getState().deviceId;
+        const current = gStore.getState().deviceId;
         const stillExists = !!list.find((d) => d.deviceId === current);
         if (!list.length || !stillExists) {
-          actions.deviceChanged(null);
+          A.deviceChanged(null);
         }
       } catch {
         track("webspeech:devicechange-fail");
@@ -324,12 +288,12 @@ export function useWebSpeechEngine(opts: WebSpeechEngineOptions): WebSpeechEngin
     // Permissions probe (only if SR exists and Permissions API available)
     const SR = getSRCtor();
     if (!SR) {
-      actions.setPermission("prompt");
+      A.setPermission("prompt");
     } else if ((globalThis as any)?.navigator?.permissions?.query) {
       (navigator as any).permissions
         .query({ name: "microphone" as any })
         .then((p: any) => {
-          actions.setPermission(p.state as any);
+          A.setPermission(p.state as any);
         })
         .catch(() => {});
     }
@@ -342,11 +306,10 @@ export function useWebSpeechEngine(opts: WebSpeechEngineOptions): WebSpeechEngin
         } catch {}
       localCleanups.length = 0;
     };
-  }, [actions, enabled, store]);
+  }, []);
 
   // 3) Manage SR lifecycle in response to global store changes
   useEffect(() => {
-    if (!enabled) return;
     const SR = getSRCtor();
     if (!SR) return;
 
@@ -357,9 +320,9 @@ export function useWebSpeechEngine(opts: WebSpeechEngineOptions): WebSpeechEngin
       (r as any).__lastInterim = "";
       (r as any).__lastFinal = "";
 
-      r.onstart = () => onSRStart(r, actions);
+      r.onstart = () => onSRStart(r);
       r.onerror = (e: any) => {
-        onSRError(r, e, actions, store);
+        onSRError(r, e);
         if (
           String(e?.error ?? e).includes("not-allowed") &&
           recRef.current === r
@@ -368,9 +331,9 @@ export function useWebSpeechEngine(opts: WebSpeechEngineOptions): WebSpeechEngin
         }
       };
       r.onend = () => {
-        onSREnd(r, actions);
+        onSREnd(r);
         if (disposedRef.current) return;
-        const { continuous, wantListening } = store.getState();
+        const { continuous, wantListening } = gStore.getState();
         if (continuous && wantListening && recRef.current === r) {
           try {
             r.start();
@@ -379,7 +342,7 @@ export function useWebSpeechEngine(opts: WebSpeechEngineOptions): WebSpeechEngin
           }
         }
       };
-      r.onresult = (ev: any) => onSRResult(r, ev, actions);
+      r.onresult = (ev: any) => onSRResult(r, ev);
     };
 
     // Helper to encapsulate start + recovery logic
@@ -388,20 +351,15 @@ export function useWebSpeechEngine(opts: WebSpeechEngineOptions): WebSpeechEngin
         r.start();
       } catch (e) {
         emit("webspeech:start-error", { msg: String(e) });
-        store.dispatch({ type: "EVT/ERROR", payload: { error: String(e) } });
+        gStore.dispatch({ type: "EVT/ERROR", payload: { error: String(e) } });
         // Deny if the browser reports a permission error shape
         const errStr = String((e as any)?.error ?? (e as any)?.name ?? e);
-        const serviceUnavailable =
-          errStr === "service-not-allowed" ||
-          errStr === "network" ||
-          errStr === "language-unavailable" ||
-          errStr === "language-not-supported" ||
-          errStr === "not-supported";
         if (
           errStr === "not-allowed" ||
+          errStr === "service-not-allowed" ||
           errStr === "NotAllowedError"
         ) {
-          actions.setPermission("denied");
+          A.setPermission("denied");
         }
 
         const stuck = recRef.current;
@@ -416,13 +374,11 @@ export function useWebSpeechEngine(opts: WebSpeechEngineOptions): WebSpeechEngin
           }
         }
 
-        if (serviceUnavailable) return;
-
         // Attempt a fresh recognizer if we are still alive
         if (!disposedRef.current && SR) {
           try {
             const fresh = new SR();
-            applyConfigTo(fresh, store);
+            applyConfigTo(fresh);
             attachHandlers(fresh);
             recRef.current = fresh;
             fresh.start();
@@ -430,7 +386,7 @@ export function useWebSpeechEngine(opts: WebSpeechEngineOptions): WebSpeechEngin
             try {
               track("webspeech:freshstart-error", { msg: String(err2) });
             } catch {}
-            store.dispatch({
+            gStore.dispatch({
               type: "EVT/ERROR",
               payload: { error: String(err2) },
             });
@@ -440,14 +396,14 @@ export function useWebSpeechEngine(opts: WebSpeechEngineOptions): WebSpeechEngin
     }
 
     const onWantListeningChange = async () => {
-      const { wantListening, permission, muted } = store.getState();
+      const { wantListening, permission, muted } = gStore.getState();
       if (disposedRef.current || !SR || muted || permission === "denied")
         return;
 
       if (wantListening) {
         if (recRef.current) return;
         const r = new SR();
-        applyConfigTo(r, store);
+        applyConfigTo(r);
         attachHandlers(r);
         recRef.current = r;
         void startWithRecovery(r);
@@ -466,7 +422,7 @@ export function useWebSpeechEngine(opts: WebSpeechEngineOptions): WebSpeechEngin
       }
     };
 
-    const unsubWant = store.subscribeToKey(
+    const unsubWant = gStore.subscribeToKey(
       "wantListening",
       onWantListeningChange
     );
@@ -484,7 +440,7 @@ export function useWebSpeechEngine(opts: WebSpeechEngineOptions): WebSpeechEngin
         cfgScheduled = false;
         if (disposedRef.current) return;
 
-        const s = store.getState();
+        const s = gStore.getState();
         const cfg = {
           lang: s.lang,
           interim: s.interim,
@@ -492,69 +448,55 @@ export function useWebSpeechEngine(opts: WebSpeechEngineOptions): WebSpeechEngin
         };
 
         if (s.listening) {
-          actions.reqStop();
-          actions.reqStart(cfg);
+          A.reqStop();
+          A.reqStart(cfg);
         } else if (s.wantListening) {
-          actions.reqStart(cfg);
+          A.reqStart(cfg);
         }
       });
     };
-    const uLang = store.subscribeToKey("lang", onCfgChange);
+    const uLang = gStore.subscribeToKey("lang", onCfgChange);
     localCleanups.push(uLang);
-    const uInterim = store.subscribeToKey("interim", onCfgChange);
+    const uInterim = gStore.subscribeToKey("interim", onCfgChange);
     localCleanups.push(uInterim);
-    const uCont = store.subscribeToKey("continuous", onCfgChange);
+    const uCont = gStore.subscribeToKey("continuous", onCfgChange);
     localCleanups.push(uCont);
 
     // Device/mute enforcement
-    const uDevice = store.subscribeToKey("deviceId", () => {
+    const uDevice = gStore.subscribeToKey("deviceId", () => {
       const { wantListening, deviceId, interim, lang, continuous } =
-        store.getState();
-      if (deviceId === null) actions.reqStop();
-      else if (wantListening) actions.reqStart({ lang, continuous, interim });
+        gStore.getState();
+      if (deviceId === null) A.reqStop();
+      else if (wantListening) A.reqStart({ lang, continuous, interim });
     });
     localCleanups.push(uDevice);
 
-    const uMuted = store.subscribeToKey("muted", () => {
+    const uMuted = gStore.subscribeToKey("muted", () => {
       if (disposedRef.current) return;
-      actions.reqStop();
+      A.reqStop();
     });
     localCleanups.push(uMuted);
 
     return () => {
-      const current = recRef.current;
-      recRef.current = null;
-      if (current) {
-        stopAndWait(current).catch((e) => {
-          try {
-            track("webspeech:stopAndWait-error", {
-              code: String((e as any)?.name || ""),
-              msg: String(e),
-              sessionId: (current as any).__sessionId || null,
-            });
-          } catch {}
-        });
-      }
-
       for (const fn of localCleanups.splice(0)) {
         try {
           fn();
         } catch {}
       }
     };
-  }, [actions, enabled, store]);
+  }, []);
 
   // 4) Public API
   const api = useMemo<WebSpeechEngine>(
     () => ({
       start() {
-        actions.reqStart();
+        A.reqStart();
       },
       stop() {
-        actions.reqStop();
+        A.reqStop();
       },
       dispose() {
-        actions.reqStop();
+        A.reqStop();
         disposedRef.current = true;
         const current = recRef.current;
         try {
@@ -563,7 +505,7 @@ export function useWebSpeechEngine(opts: WebSpeechEngineOptions): WebSpeechEngin
           });
         } catch {}
         recRef.current = null;
-        actions.resetLocal();
+        A.resetLocal();
         for (const fn of cleanupsRef.current.splice(0)) {
           try {
             fn();
@@ -586,11 +528,11 @@ export function useWebSpeechEngine(opts: WebSpeechEngineOptions): WebSpeechEngin
         track("webspeech:reset");
       },
       getLocalState: engineStore.getState,
-      getState: store.getState,
-      subscribe: store.subscribe,
-      subscribeToKey: store.subscribeToKey,
+      getState: gStore.getState,
+      subscribe: gStore.subscribe,
+      subscribeToKey: gStore.subscribeToKey,
     }),
-    [actions, store]
+    []
   );
 
   return api;

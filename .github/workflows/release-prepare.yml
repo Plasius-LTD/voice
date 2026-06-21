@@ -64,6 +64,7 @@ permissions:
 jobs:
   prepare:
     runs-on: ubuntu-latest
+    environment: production
     outputs:
       name: ${{ steps.release.outputs.name }}
       version: ${{ steps.release.outputs.version }}
@@ -146,7 +147,7 @@ jobs:
           REGISTRY_VER="$(npm view "${NAME}" version 2>/dev/null || true)"
           TAG_VER=$(
             git tag -l "${TAG_PREFIX}*" |
-              TAG_PREFIX="${TAG_PREFIX}" node <<'NODE'
+              TAG_PREFIX="${TAG_PREFIX}" node -e '
           const fs = require("node:fs");
           const prefix = process.env.TAG_PREFIX || "v";
           const parse = (value) => {
@@ -179,7 +180,7 @@ jobs:
             .sort(compare);
 
           process.stdout.write(versions.at(-1)?.version || "");
-          NODE
+          '
           )
 
           case "${BUMP:-patch}" in
@@ -189,6 +190,11 @@ jobs:
               exit 1
               ;;
           esac
+
+          if [ -n "${PREID:-}" ] && ! printf '%s' "${PREID}" | grep -Eq '^[0-9A-Za-z][0-9A-Za-z.-]*$'; then
+            echo "Invalid pre-release id: ${PREID}" >&2
+            exit 1
+          fi
 
           if [ "${BUMP}" = "none" ]; then
             TARGET_VER="${CURRENT_VER}"
@@ -274,15 +280,15 @@ jobs:
           fi
 
           if ! grep -q "^## \[${TARGET_VER}\]" "${FILE}"; then
-            UNREL_START=$(grep -n '^## \[Unreleased\]' "${FILE}" | cut -d: -f1 || true)
+            UNREL_START=$(grep -nE '^## (\[Unreleased\]|Unreleased)( |$)' "${FILE}" | head -n 1 | cut -d: -f1 || true)
             if [ -z "${UNREL_START}" ]; then
-              echo "No '## [Unreleased]' section found in CHANGELOG.md." >&2
+              echo "No '## [Unreleased]' or '## Unreleased' section found in CHANGELOG.md." >&2
               exit 1
             fi
 
             DATE=$(date -u +%Y-%m-%d)
             VERSION_LINE="## [${TARGET_VER}] - ${DATE}"
-            NEXT_HDR=$(awk 'NR>'"${UNREL_START}"' && /^## \[/{print NR; exit}' "${FILE}")
+            NEXT_HDR=$(awk 'NR>'"${UNREL_START}"' && /^## /{print NR; exit}' "${FILE}")
             if [ -z "${NEXT_HDR}" ]; then
               NEXT_HDR=$(wc -l < "${FILE}")
               NEXT_HDR=$((NEXT_HDR+1))
@@ -417,6 +423,14 @@ jobs:
             FLAGS=""
           else
             FLAGS="--access public"
+          fi
+
+          if [ -n "${PREID:-}" ]; then
+            if [ -n "${FLAGS}" ]; then
+              FLAGS="${FLAGS} --tag ${PREID}"
+            else
+              FLAGS="--tag ${PREID}"
+            fi
           fi
 
           COMMIT_SHA=$(git rev-parse HEAD)

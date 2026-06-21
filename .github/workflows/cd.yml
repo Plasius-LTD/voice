@@ -21,17 +21,29 @@ on:
 permissions:
   actions: read
   contents: write
+  pull-requests: write
   id-token: write # for npm provenance (requires Node 18+ and npm >=9)
   attestations: write
 
 
 jobs:
+  prepare_release:
+    uses: Plasius-LTD/plasius-ltd-site/.github/workflows/release-prepare.yml@main
+    with:
+      bump: ${{ inputs.bump }}
+      preid: ${{ inputs.preid }}
+    secrets: inherit
+
   publish:
+    needs: prepare_release
     runs-on: ubuntu-latest
     environment: production
     steps:
       - name: Checkout
         uses: actions/checkout@v4
+        with:
+          ref: main
+          fetch-depth: 0
 
       - name: Use Node.js 24
         uses: actions/setup-node@v4
@@ -39,119 +51,17 @@ jobs:
           node-version-file: '.nvmrc'
           cache: 'npm'
 
-      - name: Bump version & decide publish flags
+      - name: Use prepared release metadata
         id: pkg
-        env:
-          NPM_TOKEN: ${{ secrets.NPM_TOKEN }}
-          BUMP: ${{ inputs.bump }}
-          PREID: ${{ inputs.preid }}
         run: |
-          set -euo pipefail
-          git config user.name "github-actions[bot]"
-          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-
-          # Decide bump command (stable path only). Pre-release logic handled separately below.
-          BUMP_CMD=""
-          case "${BUMP:-patch}" in
-            major|minor|patch)
-              if [ -n "${PREID:-}" ]; then
-                # handled below by custom prerelease resolver
-                BUMP_CMD=""
-              else
-                BUMP_CMD="npm version ${BUMP} --no-git-tag-version"
-              fi
-              ;;
-            none)
-              # No version bump; use existing version
-              BUMP_CMD="echo"
-              ;;
-            *)
-              echo "Unknown bump type: ${BUMP}" >&2
-              exit 1
-              ;;
-          esac
-
-          NAME=$(node -p "require('./package.json').name")
-
-          # If preid is provided with bump=none, advance to next prerelease of the same preid (or start prepatch)
-          if [ -n "${PREID:-}" ] && [ "${BUMP:-patch}" = "none" ]; then
-            echo "Calculating next prerelease for current version using preid='${PREID}' (bump=none)"
-            CURRENT_VER=$(node -p "require('./package.json').version")
-
-            # Always work cleanly
-            git checkout -- package.json package-lock.json 2>/dev/null || true
-
-            if printf '%s' "$CURRENT_VER" | grep -q "-${PREID}\\."; then
-              # Already a prerelease with this preid: bump to next prerelease
-              npm version prerelease --preid "${PREID}" --no-git-tag-version >/dev/null
-            else
-              # Start a prerelease from current stable using prepatch by default
-              npm version prepatch --preid "${PREID}" --no-git-tag-version >/dev/null
-            fi
-
-            CANDIDATE=$(node -p "require('./package.json').version")
-
-            # Ensure uniqueness vs git tags and npm registry
-            while git rev-parse -q --verify "refs/tags/v${CANDIDATE}" >/dev/null 2>&1 \
-              || npm view "${NAME}@${CANDIDATE}" version >/dev/null 2>&1; do
-              npm version prerelease --preid "${PREID}" --no-git-tag-version >/dev/null
-              CANDIDATE=$(node -p "require('./package.json').version")
-            done
-
-            echo "Resolved prerelease version: ${CANDIDATE}"
-            NEW_VER="v${CANDIDATE}"
-          elif [ -n "${PREID:-}" ] && [[ "${BUMP:-patch}" =~ ^(major|minor|patch)$ ]]; then
-            echo "Calculating next available prerelease for preid='${PREID}' and bump='${BUMP}'"
-
-            CURRENT_VER=$(node -p "require('./package.json').version")
-
-            # Start from pre${BUMP} (e.g., preminor) without tagging/committing
-            npm version "pre${BUMP}" --preid "${PREID}" --no-git-tag-version >/dev/null
-            CANDIDATE=$(node -p "require('./package.json').version")
-
-            # If that candidate already exists as a git tag or on npm, advance prerelease until unique
-            while git rev-parse -q --verify "refs/tags/v${CANDIDATE}" >/dev/null 2>&1 \
-              || npm view "${NAME}@${CANDIDATE}" version >/dev/null 2>&1; do
-              npm version prerelease --preid "${PREID}" --no-git-tag-version >/dev/null
-              CANDIDATE=$(node -p "require('./package.json').version")
-            done
-
-            echo "Resolved prerelease version: ${CANDIDATE}"
-
-            # Reset working tree changes to avoid double-commit; then set exact version to create tag/commit
-            git checkout -- package.json package-lock.json 2>/dev/null || true
-            npm version "${CANDIDATE}" --no-git-tag-version >/dev/null
-            NEW_VER="v${CANDIDATE}"
-          else
-            # Stable bump (or bump=none)
-            if [ "${BUMP}" = "none" ]; then
-              CURRENT_VER=$(node -p "require('./package.json').version")
-              NEW_VER="v${CURRENT_VER}"
-            else
-              # shellcheck disable=SC2086
-              sh -lc "$BUMP_CMD" >/dev/null
-              VER_NO_V=$(node -p "require('./package.json').version")
-              NEW_VER="v${VER_NO_V}"
-            fi
-          fi
-
-          echo "New version: $NEW_VER"
-
-          # Expose tag (vX.Y.Z) and version (X.Y.Z) for later steps
-          VER_NO_V=${NEW_VER#v}
-          echo "tag=$NEW_VER" >> "$GITHUB_OUTPUT"
-          echo "version=$VER_NO_V" >> "$GITHUB_OUTPUT"
-
-          echo "name=$NAME" >> "$GITHUB_OUTPUT"
-          FLAGS=""
-          if ! npm view "$NAME" version >/dev/null 2>&1; then
-            FLAGS="--access public"
-          fi
-          if [ -n "${PREID:-}" ]; then
-            FLAGS="--tag ${PREID} ${FLAGS}"
-          fi
-          echo "flags=${FLAGS}" >> "$GITHUB_OUTPUT"
-
+          {
+            echo "mode=publish"
+            echo "name=${{ needs.prepare_release.outputs.name }}"
+            echo "tag=${{ needs.prepare_release.outputs.tag }}"
+            echo "version=${{ needs.prepare_release.outputs.version }}"
+            echo "flags=${{ needs.prepare_release.outputs.flags }}"
+            echo "published=${{ needs.prepare_release.outputs.published }}"
+          } >> "$GITHUB_OUTPUT"
       - name: Install deps (CI)
         run: npm ci
 
@@ -178,100 +88,30 @@ jobs:
         with:
           subject-path: sbom.cdx.json
 
-      - name: Update CHANGELOG.md (move Unreleased to new version)
+      - name: Create release tag from main
         env:
-          VERSION: ${{ steps.pkg.outputs.version }}
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           TAG: ${{ steps.pkg.outputs.tag }}
-          GITHUB_REPOSITORY: ${{ github.repository }}
-          verbose: true
         run: |
           set -euo pipefail
-          git config user.name "github-actions[bot]"
-          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git fetch origin main --tags
+          git checkout -B main origin/main
 
-          FILE="CHANGELOG.md"
-          if [ ! -f "$FILE" ]; then
-            echo "No CHANGELOG.md found; skipping changelog update."
-            exit 0
-          fi
-
-          if grep -q "^## \[${VERSION}\]" "$FILE"; then
-            echo "CHANGELOG.md already contains a ${VERSION} release section; skipping changelog update."
-            exit 0
-          fi
-
-          DATE=$(date -u +%Y-%m-%d)
-          VERSION_LINE="## [${VERSION}] - ${DATE}"
-
-          # Identify Unreleased block boundaries
-          UNREL_START=$(grep -n '^## \[Unreleased\]' "$FILE" | cut -d: -f1 || true)
-          if [ -z "$UNREL_START" ]; then
-            echo "No '## [Unreleased]' section found; skipping changelog update."
-            exit 0
-          fi
-          NEXT_HDR=$(awk 'NR>'"$UNREL_START"' && /^## \[/{print NR; exit}' "$FILE")
-          if [ -z "$NEXT_HDR" ]; then
-            NEXT_HDR=$(wc -l < "$FILE")
-            NEXT_HDR=$((NEXT_HDR+1))
-          fi
-
-          # Extract sections
-          HEADER=$(sed -n "1,${UNREL_START}p" "$FILE")
-          UNREL_CONTENT=$(sed -n "$((UNREL_START+1)),$((NEXT_HDR-1))p" "$FILE")
-          TAIL=$(sed -n "${NEXT_HDR},\$p" "$FILE")
-
-          # Prepare new Unreleased template (Keep a Changelog style) without tabs/indent issues
-          NEW_UNRELEASED=$(printf '%s\n' \
-            '' \
-            '- **Added**' \
-            '  - (placeholder)' \
-            '' \
-            '- **Changed**' \
-            '  - (placeholder)' \
-            '' \
-            '- **Fixed**' \
-            '  - (placeholder)' \
-            '' \
-            '- **Security**' \
-            '  - (placeholder)')
-
-          # Build the new CHANGELOG content
-          TMP_FILE=$(mktemp)
-          {
-            printf "%s\n" "$HEADER"
-            printf "%s\n\n" "$NEW_UNRELEASED"
-            printf "%s\n" "$VERSION_LINE"
-            # If Unreleased was empty, at least add a placeholder so the section isn't blank
-            if [ -z "$(echo "$UNREL_CONTENT" | tr -d '\n' | tr -d '[:space:]')" ]; then
-              printf "### Changed\n- (no notable changes)\n\n"
-            else
-              printf "%s\n" "$UNREL_CONTENT"
-              # Ensure a trailing newline after the inserted section
-              printf "\n"
+          if git ls-remote --exit-code --tags origin "refs/tags/${TAG}" >/dev/null 2>&1; then
+            if gh release view "${TAG}" >/dev/null 2>&1; then
+              IS_DRAFT="$(gh release view "${TAG}" --json isDraft --jq '.isDraft')"
+              if [ "${IS_DRAFT}" != "true" ]; then
+                echo "Published release ${TAG} already exists; reusing the existing tag."
+                exit 0
+              fi
             fi
-            printf "%s\n" "$TAIL"
-          } > "$TMP_FILE"
 
-          mv "$TMP_FILE" "$FILE"
-
-          git add package.json package-lock.json 2>/dev/null || true
-
-          # Update bottom compare links
-          # Update [Unreleased] compare to start at v${VERSION}
-          COMPARE_URL="https://github.com/${GITHUB_REPOSITORY}/compare/v${VERSION}...HEAD"
-          awk -v repl="[Unreleased]: ${COMPARE_URL}" 'BEGIN{OFS=FS} { if ($0 ~ /^\[Unreleased\]: /) { print repl } else { print } }' "$FILE" > "$FILE.tmp"
-          mv "$FILE.tmp" "$FILE"
-
-          # Append a link for the new version if not present
-          if ! grep -q "^\[${VERSION}\]:" "$FILE"; then
-            echo "[${VERSION}]: https://github.com/${GITHUB_REPOSITORY}/releases/tag/v${VERSION}" >> "$FILE"
+            echo "Deleting stale unpublished tag ${TAG} before recreating it from main."
+            git push origin ":refs/tags/${TAG}"
           fi
 
-          git add "$FILE" package.json package-lock.json 2>/dev/null || true
-          git commit -m "chore(release): v${VERSION}"
-          git tag -a "v${VERSION}" -m "Release v${VERSION}"
-          git push origin HEAD
-          git push origin "v${VERSION}"
+          git tag "${TAG}"
+          git push origin "${TAG}"
 
       - name: Create GitHub Release draft (immutable-safe)
         env:

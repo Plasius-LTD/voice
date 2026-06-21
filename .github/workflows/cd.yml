@@ -110,7 +110,6 @@ jobs:
       - name: Generate SBOM (CycloneDX)
         if: steps.release.outputs.should_finalize_release == 'true'
         run: npm sbom --sbom-format=cyclonedx --sbom-type=library --omit dev > sbom.cdx.json
-        continue-on-error: true
 
       - name: Attest SBOM
         if: steps.release.outputs.should_finalize_release == 'true' && hashFiles('sbom.cdx.json') != ''
@@ -123,6 +122,7 @@ jobs:
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           TAG: ${{ steps.release.outputs.release_tag }}
+          PUBLISHED: ${{ needs.prepare_release.outputs.published }}
         run: |
           set -euo pipefail
 
@@ -137,6 +137,11 @@ jobs:
               exit 0
             fi
 
+            if [ "${PUBLISHED}" = "true" ]; then
+              echo "Package is already published; preserving existing tag ${TAG} at ${TAG_SHA}."
+              exit 0
+            fi
+
             if gh release view "${TAG}" >/dev/null 2>&1; then
               IS_DRAFT="$(gh release view "${TAG}" --json isDraft --jq '.isDraft')"
               if [ "${IS_DRAFT}" != "true" ]; then
@@ -148,6 +153,9 @@ jobs:
             echo "Replacing stale unpublished tag ${TAG}."
             git push origin ":refs/tags/${TAG}"
             git tag -d "${TAG}" >/dev/null 2>&1 || true
+          elif [ "${PUBLISHED}" = "true" ]; then
+            echo "Package is already published but tag ${TAG} is missing; cannot safely recreate a release tag after npm publication." >&2
+            exit 1
           fi
 
           git tag "${TAG}" "${HEAD_SHA}"
@@ -165,8 +173,8 @@ jobs:
           if gh release view "${TAG}" >/dev/null 2>&1; then
             IS_DRAFT="$(gh release view "${TAG}" --json isDraft --jq '.isDraft')"
             if [ "${IS_DRAFT}" != "true" ]; then
-              echo "Release ${TAG} already exists and is published. Cut a new version instead." >&2
-              exit 1
+              echo "Release ${TAG} is already published; nothing to recover."
+              exit 0
             fi
 
             if [ -s sbom.cdx.json ]; then
@@ -191,11 +199,18 @@ jobs:
         env:
           NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
           FLAGS: ${{ steps.release.outputs.flags }}
+          PACKAGE_NAME: ${{ steps.release.outputs.package_name }}
+          PACKAGE_VERSION: ${{ steps.release.outputs.release_version }}
         run: |
           set -euo pipefail
           if [ -z "${NODE_AUTH_TOKEN:-}" ]; then
             echo "NPM_TOKEN is required" >&2
             exit 1
+          fi
+
+          if npm view "${PACKAGE_NAME}@${PACKAGE_VERSION}" version --registry https://registry.npmjs.org >/dev/null 2>&1; then
+            echo "${PACKAGE_NAME}@${PACKAGE_VERSION} already exists on npm; skipping duplicate publish."
+            exit 0
           fi
 
           npm publish ${FLAGS} --provenance --registry https://registry.npmjs.org

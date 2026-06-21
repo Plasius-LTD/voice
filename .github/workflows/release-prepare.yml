@@ -202,10 +202,26 @@ jobs:
             exit 1
           fi
 
+          CURRENT_TAG="${TAG_PREFIX}${CURRENT_VER}"
+          if npm view "${NAME}@${CURRENT_VER}" version >/dev/null 2>&1; then
+            CURRENT_PUBLISHED="true"
+          else
+            CURRENT_PUBLISHED="false"
+          fi
+
+          CURRENT_RELEASE_STATE="missing"
+          if gh release view "${CURRENT_TAG}" >/dev/null 2>&1; then
+            if [ "$(gh release view "${CURRENT_TAG}" --json isDraft --jq '.isDraft')" = "true" ]; then
+              CURRENT_RELEASE_STATE="draft"
+            else
+              CURRENT_RELEASE_STATE="published"
+            fi
+          fi
+
           if [ "${BUMP}" = "none" ]; then
             TARGET_VER="${CURRENT_VER}"
-          elif ! npm view "${NAME}@${CURRENT_VER}" version >/dev/null 2>&1 && grep -Eq "^## (\[${CURRENT_VER}\]|${CURRENT_VER})( |$)" "${FILE}"; then
-            echo "Reusing already-prepared unpublished version ${CURRENT_VER}."
+          elif grep -Eq "^## (\[${CURRENT_VER}\]|${CURRENT_VER})( |$)" "${FILE}" && { [ "${CURRENT_PUBLISHED}" != "true" ] || [ "${CURRENT_RELEASE_STATE}" != "published" ]; }; then
+            echo "Reusing already-prepared incomplete release version ${CURRENT_VER}."
             TARGET_VER="${CURRENT_VER}"
           else
             TARGET_VER=$(node -e '
@@ -358,6 +374,12 @@ jobs:
               echo "Release metadata pushed directly to ${BASE_BRANCH}."
             else
               BRANCH="release/${TAG}"
+              if [ -z "${RELEASE_PREP_TOKEN:-}" ]; then
+                echo "RELEASE_PREP_TOKEN is required when branch protection forces release metadata through a PR; github.token-created PRs do not reliably trigger required workflows." >&2
+                exit 1
+              fi
+              git remote set-url origin "https://x-access-token:${RELEASE_PREP_TOKEN}@github.com/${GITHUB_REPOSITORY}.git"
+              git fetch origin "refs/heads/${BRANCH}:refs/remotes/origin/${BRANCH}" || true
               git push --force-with-lease --set-upstream origin "HEAD:${BRANCH}"
 
               PR_TITLE="chore: prepare release ${TAG}"
@@ -428,15 +450,27 @@ jobs:
             FLAGS="--access public"
           fi
 
-          if [ -n "${PREID:-}" ]; then
+          EFFECTIVE_PREID="${PREID:-}"
+          if [ -z "${EFFECTIVE_PREID}" ]; then
+            EFFECTIVE_PREID=$(TARGET_VER="${TARGET_VER}" node -e '
+          const version = process.env.TARGET_VER || "";
+          const match = version.match(/^[0-9]+\.[0-9]+\.[0-9]+-([0-9A-Za-z][0-9A-Za-z.-]*)\.[0-9]+$/);
+          process.stdout.write(match ? match[1] : "");
+          ')
+          fi
+
+          if [ -n "${EFFECTIVE_PREID}" ]; then
             if [ -n "${FLAGS}" ]; then
-              FLAGS="${FLAGS} --tag ${PREID}"
+              FLAGS="${FLAGS} --tag ${EFFECTIVE_PREID}"
             else
-              FLAGS="--tag ${PREID}"
+              FLAGS="--tag ${EFFECTIVE_PREID}"
             fi
           fi
 
-          COMMIT_SHA=$(git rev-parse HEAD)
+          COMMIT_SHA=$(git log -n 1 --format=%H -- "${PACKAGE_JSON}")
+          if [ -z "${COMMIT_SHA}" ]; then
+            COMMIT_SHA=$(git rev-parse HEAD)
+          fi
           {
             echo "name=${NAME}"
             echo "version=${TARGET_VER}"

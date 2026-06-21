@@ -1,0 +1,430 @@
+name: Release Prepare
+
+on:
+  workflow_call:
+    inputs:
+      bump:
+        description: "Version bump type"
+        required: true
+        type: string
+      preid:
+        description: "Pre-release id (for example beta or rc). Leave blank for stable."
+        required: false
+        type: string
+      base_branch:
+        description: "Protected branch that must receive release metadata before publishing."
+        required: false
+        type: string
+        default: main
+      package_directory:
+        description: "Directory containing the package.json to version."
+        required: false
+        type: string
+        default: "."
+      changelog_path:
+        description: "CHANGELOG.md path to promote for this release."
+        required: false
+        type: string
+        default: "CHANGELOG.md"
+      tag_prefix:
+        description: "Prefix for release tags, for example v or ui-foundry-core-v."
+        required: false
+        type: string
+        default: "v"
+      merge_timeout_seconds:
+        description: "How long to wait for a release-prep PR to merge before failing."
+        required: false
+        type: string
+        default: "1200"
+    outputs:
+      name:
+        description: "npm package name"
+        value: ${{ jobs.prepare.outputs.name }}
+      version:
+        description: "Prepared package version without leading v"
+        value: ${{ jobs.prepare.outputs.version }}
+      tag:
+        description: "Prepared release tag"
+        value: ${{ jobs.prepare.outputs.tag }}
+      flags:
+        description: "npm publish flags"
+        value: ${{ jobs.prepare.outputs.flags }}
+      published:
+        description: "Whether this exact package version already exists on npm"
+        value: ${{ jobs.prepare.outputs.published }}
+      commit_sha:
+        description: "main commit containing the release metadata"
+        value: ${{ jobs.prepare.outputs.commit_sha }}
+
+permissions:
+  contents: write
+  pull-requests: write
+  actions: read
+
+jobs:
+  prepare:
+    runs-on: ubuntu-latest
+    outputs:
+      name: ${{ steps.release.outputs.name }}
+      version: ${{ steps.release.outputs.version }}
+      tag: ${{ steps.release.outputs.tag }}
+      flags: ${{ steps.release.outputs.flags }}
+      published: ${{ steps.release.outputs.published }}
+      commit_sha: ${{ steps.release.outputs.commit_sha }}
+    steps:
+      - name: Checkout main
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ inputs.base_branch }}
+          fetch-depth: 0
+
+      - name: Use Node.js 24
+        uses: actions/setup-node@v4
+        with:
+          node-version-file: '.nvmrc'
+          cache: 'npm'
+
+      - name: Prepare and land release metadata
+        id: release
+        env:
+          BASE_BRANCH: ${{ inputs.base_branch }}
+          BUMP: ${{ inputs.bump }}
+          PREID: ${{ inputs.preid }}
+          PACKAGE_DIRECTORY: ${{ inputs.package_directory }}
+          CHANGELOG_PATH: ${{ inputs.changelog_path }}
+          TAG_PREFIX: ${{ inputs.tag_prefix }}
+          MERGE_TIMEOUT_SECONDS: ${{ inputs.merge_timeout_seconds }}
+          GITHUB_TOKEN: ${{ github.token }}
+          GH_TOKEN: ${{ secrets.RELEASE_PREP_TOKEN || github.token }}
+          RELEASE_PREP_TOKEN: ${{ secrets.RELEASE_PREP_TOKEN }}
+        run: |
+          set -euo pipefail
+
+          if [ "${GITHUB_REF_NAME:-}" != "${BASE_BRANCH}" ]; then
+            echo "Run cd.yml from ${BASE_BRANCH}; release metadata must be prepared from the protected release branch." >&2
+            exit 1
+          fi
+
+          AUTH_TOKEN="${RELEASE_PREP_TOKEN:-${GITHUB_TOKEN}}"
+          git remote set-url origin "https://x-access-token:${AUTH_TOKEN}@github.com/${GITHUB_REPOSITORY}.git"
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+
+          git fetch origin "${BASE_BRANCH}" --tags
+          git checkout -B "${BASE_BRANCH}" "origin/${BASE_BRANCH}"
+
+          PACKAGE_DIRECTORY="${PACKAGE_DIRECTORY%/}"
+          if [ -z "${PACKAGE_DIRECTORY}" ]; then
+            PACKAGE_DIRECTORY="."
+          fi
+
+          if [ "${PACKAGE_DIRECTORY}" = "." ]; then
+            PACKAGE_JSON="package.json"
+          else
+            PACKAGE_JSON="${PACKAGE_DIRECTORY}/package.json"
+          fi
+
+          if [ ! -f "${PACKAGE_JSON}" ]; then
+            echo "Package manifest not found: ${PACKAGE_JSON}" >&2
+            exit 1
+          fi
+
+          NAME=$(PACKAGE_JSON_PATH="${PACKAGE_JSON}" node -p "const path = require('node:path'); const pkg = require(path.resolve(process.env.PACKAGE_JSON_PATH)); pkg.name || ''")
+          CURRENT_VER=$(PACKAGE_JSON_PATH="${PACKAGE_JSON}" node -p "const path = require('node:path'); const pkg = require(path.resolve(process.env.PACKAGE_JSON_PATH)); pkg.version || ''")
+          PRIVATE_PACKAGE=$(PACKAGE_JSON_PATH="${PACKAGE_JSON}" node -p "const path = require('node:path'); const pkg = require(path.resolve(process.env.PACKAGE_JSON_PATH)); String(Boolean(pkg.private))")
+
+          if [ -z "${NAME}" ] || [ -z "${CURRENT_VER}" ]; then
+            echo "${PACKAGE_JSON} must define package name and version." >&2
+            exit 1
+          fi
+
+          if [ "${PRIVATE_PACKAGE}" = "true" ]; then
+            echo "Cannot release private package ${NAME} from ${PACKAGE_JSON}." >&2
+            exit 1
+          fi
+
+          REGISTRY_VER="$(npm view "${NAME}" version 2>/dev/null || true)"
+          TAG_VER=$(
+            git tag -l "${TAG_PREFIX}*" |
+              TAG_PREFIX="${TAG_PREFIX}" node <<'NODE'
+          const fs = require("node:fs");
+          const prefix = process.env.TAG_PREFIX || "v";
+          const parse = (value) => {
+            const trimmed = String(value || "").trim();
+            if (!trimmed.startsWith(prefix)) return null;
+            const version = trimmed.slice(prefix.length).replace(/\^\{\}$/, "");
+            const [core, prerelease = ""] = version.split("-");
+            const parts = core.split(".").map((part) => Number(part));
+            if (parts.length !== 3 || parts.some((part) => !Number.isInteger(part) || part < 0)) {
+              return null;
+            }
+            return { version, parts, prerelease };
+          };
+          const compare = (left, right) => {
+            for (let index = 0; index < 3; index += 1) {
+              const diff = left.parts[index] - right.parts[index];
+              if (diff !== 0) return diff;
+            }
+            if (left.prerelease === right.prerelease) return 0;
+            if (!left.prerelease) return 1;
+            if (!right.prerelease) return -1;
+            return left.prerelease.localeCompare(right.prerelease, undefined, { numeric: true });
+          };
+
+          const versions = fs
+            .readFileSync(0, "utf8")
+            .split(/\r?\n/)
+            .map(parse)
+            .filter(Boolean)
+            .sort(compare);
+
+          process.stdout.write(versions.at(-1)?.version || "");
+          NODE
+          )
+
+          case "${BUMP:-patch}" in
+            major|minor|patch|none) ;;
+            *)
+              echo "Unknown bump type: ${BUMP}" >&2
+              exit 1
+              ;;
+          esac
+
+          if [ "${BUMP}" = "none" ]; then
+            TARGET_VER="${CURRENT_VER}"
+          else
+            TARGET_VER=$(node -e '
+          const [localVersion, registryVersion, tagVersion, bump, preid] = process.argv.slice(1);
+          const clean = (value) => String(value || "").replace(/^v/, "").trim();
+          const parse = (value) => {
+            const [core] = clean(value).split("-");
+            const parts = core.split(".").map((part) => Number(part));
+            if (parts.length !== 3 || parts.some((part) => !Number.isInteger(part) || part < 0)) {
+              throw new Error(`Invalid semver value: ${value}`);
+            }
+            return parts;
+          };
+          const compare = (left, right) => {
+            for (let index = 0; index < 3; index += 1) {
+              const diff = left[index] - right[index];
+              if (diff !== 0) return diff;
+            }
+            return 0;
+          };
+
+          const candidates = [localVersion, registryVersion, tagVersion].filter(Boolean).map(parse);
+          let base = candidates[0];
+          for (const candidate of candidates.slice(1)) {
+            if (compare(candidate, base) > 0) base = candidate;
+          }
+
+          let next;
+          switch (bump) {
+            case "major":
+              next = [base[0] + 1, 0, 0];
+              break;
+            case "minor":
+              next = [base[0], base[1] + 1, 0];
+              break;
+            case "patch":
+              next = [base[0], base[1], base[2] + 1];
+              break;
+            default:
+              throw new Error(`Unknown bump type: ${bump}`);
+          }
+
+          let version = next.join(".");
+          if (preid) {
+            version = `${version}-${preid}.0`;
+          }
+          process.stdout.write(version);
+          ' "${CURRENT_VER}" "${REGISTRY_VER}" "${TAG_VER}" "${BUMP}" "${PREID:-}")
+            if [ "${PACKAGE_DIRECTORY}" = "." ]; then
+              npm version "${TARGET_VER}" --no-git-tag-version --allow-same-version
+            else
+              npm version "${TARGET_VER}" --workspace "${PACKAGE_DIRECTORY}" --no-git-tag-version --allow-same-version
+            fi
+          fi
+
+          TAG="${TAG_PREFIX}${TARGET_VER}"
+
+          if npm view "${NAME}@${TARGET_VER}" version >/dev/null 2>&1; then
+            PUBLISHED="true"
+          else
+            PUBLISHED="false"
+          fi
+
+          if [ "${BUMP}" != "none" ] && [ "${PUBLISHED}" = "true" ]; then
+            echo "${NAME}@${TARGET_VER} already exists on npm; cut a new version instead." >&2
+            exit 1
+          fi
+
+          if [ "${BUMP}" != "none" ] && gh release view "${TAG}" >/dev/null 2>&1; then
+            IS_DRAFT="$(gh release view "${TAG}" --json isDraft --jq '.isDraft')"
+            if [ "${IS_DRAFT}" != "true" ]; then
+              echo "GitHub release ${TAG} is already published; cut a new version instead." >&2
+              exit 1
+            fi
+          fi
+
+          FILE="${CHANGELOG_PATH}"
+          if [ ! -f "${FILE}" ]; then
+            echo "CHANGELOG.md is required for release metadata preparation." >&2
+            exit 1
+          fi
+
+          if ! grep -q "^## \[${TARGET_VER}\]" "${FILE}"; then
+            UNREL_START=$(grep -n '^## \[Unreleased\]' "${FILE}" | cut -d: -f1 || true)
+            if [ -z "${UNREL_START}" ]; then
+              echo "No '## [Unreleased]' section found in CHANGELOG.md." >&2
+              exit 1
+            fi
+
+            DATE=$(date -u +%Y-%m-%d)
+            VERSION_LINE="## [${TARGET_VER}] - ${DATE}"
+            NEXT_HDR=$(awk 'NR>'"${UNREL_START}"' && /^## \[/{print NR; exit}' "${FILE}")
+            if [ -z "${NEXT_HDR}" ]; then
+              NEXT_HDR=$(wc -l < "${FILE}")
+              NEXT_HDR=$((NEXT_HDR+1))
+            fi
+
+            HEADER=$(sed -n "1,${UNREL_START}p" "${FILE}")
+            UNREL_CONTENT=$(sed -n "$((UNREL_START+1)),$((NEXT_HDR-1))p" "${FILE}")
+            TAIL=$(sed -n "${NEXT_HDR},\$p" "${FILE}")
+
+            NEW_UNRELEASED=$(printf '%s\n' \
+              '' \
+              '- **Added**' \
+              '  - (placeholder)' \
+              '' \
+              '- **Changed**' \
+              '  - (placeholder)' \
+              '' \
+              '- **Fixed**' \
+              '  - (placeholder)' \
+              '' \
+              '- **Security**' \
+              '  - (placeholder)')
+
+            TMP_FILE=$(mktemp)
+            {
+              printf "%s\n" "${HEADER}"
+              printf "%s\n\n" "${NEW_UNRELEASED}"
+              printf "%s\n" "${VERSION_LINE}"
+              if [ -z "$(echo "${UNREL_CONTENT}" | tr -d '\n' | tr -d '[:space:]')" ]; then
+                printf "### Changed\n- (no notable changes)\n\n"
+              else
+                printf "%s\n" "${UNREL_CONTENT}"
+                printf "\n"
+              fi
+              printf "%s\n" "${TAIL}"
+            } > "${TMP_FILE}"
+
+            mv "${TMP_FILE}" "${FILE}"
+
+            COMPARE_URL="https://github.com/${GITHUB_REPOSITORY}/compare/${TAG}...HEAD"
+            awk -v repl="[Unreleased]: ${COMPARE_URL}" 'BEGIN{OFS=FS} { if ($0 ~ /^\[Unreleased\]: /) { print repl } else { print } }' "${FILE}" > "${FILE}.tmp"
+            mv "${FILE}.tmp" "${FILE}"
+
+            if ! grep -q "^\[${TARGET_VER}\]:" "${FILE}"; then
+              echo "[${TARGET_VER}]: https://github.com/${GITHUB_REPOSITORY}/releases/tag/${TAG}" >> "${FILE}"
+            fi
+          fi
+
+          git add "${PACKAGE_JSON}"
+          if [ -f package-lock.json ]; then
+            git add package-lock.json
+          fi
+          if [ "${PACKAGE_DIRECTORY}" != "." ] && [ -f "${PACKAGE_DIRECTORY}/package-lock.json" ]; then
+            git add "${PACKAGE_DIRECTORY}/package-lock.json"
+          fi
+          git add "${FILE}"
+
+          if git diff --cached --quiet; then
+            echo "Release metadata already exists on ${BASE_BRANCH} for ${TAG}."
+          else
+            git commit -m "chore: prepare release ${TAG}"
+
+            if git push origin "HEAD:${BASE_BRANCH}"; then
+              echo "Release metadata pushed directly to ${BASE_BRANCH}."
+            else
+              BRANCH="release/${TAG}"
+              git push --force-with-lease --set-upstream origin "HEAD:${BRANCH}"
+
+              PR_TITLE="chore: prepare release ${TAG}"
+              PR_BODY=$(cat <<EOF
+          ## Summary
+          - prepare \`${TAG}\` for publication from protected \`${BASE_BRANCH}\`
+          - update package metadata to \`${TARGET_VER}\`
+          - move the current \`Unreleased\` notes into \`${TARGET_VER}\`
+
+          The CD workflow will continue only after this release metadata is present on \`${BASE_BRANCH}\`.
+          EOF
+          )
+
+              PR_NUMBER="$(gh pr list --head "${BRANCH}" --base "${BASE_BRANCH}" --state open --json number --jq '.[0].number' || true)"
+              if [ -n "${PR_NUMBER}" ] && [ "${PR_NUMBER}" != "null" ]; then
+                gh pr edit "${PR_NUMBER}" --title "${PR_TITLE}" --body "${PR_BODY}"
+              else
+                PR_URL="$(gh pr create --base "${BASE_BRANCH}" --head "${BRANCH}" --title "${PR_TITLE}" --body "${PR_BODY}")"
+                PR_NUMBER="$(gh pr view "${PR_URL}" --json number --jq '.number')"
+              fi
+
+              if gh pr merge "${PR_NUMBER}" --squash --delete-branch; then
+                echo "Release metadata PR #${PR_NUMBER} merged."
+              else
+                echo "Immediate merge was not available for release metadata PR #${PR_NUMBER}; enabling auto-merge and waiting."
+                gh pr merge "${PR_NUMBER}" --auto --squash --delete-branch || true
+
+                DEADLINE=$((SECONDS + MERGE_TIMEOUT_SECONDS))
+                while [ "${SECONDS}" -lt "${DEADLINE}" ]; do
+                  STATE="$(gh pr view "${PR_NUMBER}" --json state --jq '.state')"
+                  if [ "${STATE}" = "MERGED" ]; then
+                    echo "Release metadata PR #${PR_NUMBER} merged."
+                    break
+                  fi
+                  if [ "${STATE}" = "CLOSED" ]; then
+                    echo "Release metadata PR #${PR_NUMBER} closed without merging." >&2
+                    exit 1
+                  fi
+                  sleep 10
+                done
+
+                STATE="$(gh pr view "${PR_NUMBER}" --json state --jq '.state')"
+                if [ "${STATE}" != "MERGED" ]; then
+                  echo "Release metadata PR #${PR_NUMBER} did not merge within ${MERGE_TIMEOUT_SECONDS}s; release will not continue until ${BASE_BRANCH} contains ${TAG}." >&2
+                  exit 1
+                fi
+              fi
+            fi
+          fi
+
+          git fetch origin "${BASE_BRANCH}" --tags
+          git checkout -B "${BASE_BRANCH}" "origin/${BASE_BRANCH}"
+
+          MAIN_VERSION=$(PACKAGE_JSON_PATH="${PACKAGE_JSON}" node -p "const path = require('node:path'); const pkg = require(path.resolve(process.env.PACKAGE_JSON_PATH)); pkg.version || ''")
+          if [ "${MAIN_VERSION}" != "${TARGET_VER}" ]; then
+            echo "${BASE_BRANCH} has package version ${MAIN_VERSION}, expected ${TARGET_VER}." >&2
+            exit 1
+          fi
+
+          if ! grep -q "^## \[${TARGET_VER}\]" "${FILE}"; then
+            echo "${BASE_BRANCH} is missing ${FILE} release section ${TARGET_VER}." >&2
+            exit 1
+          fi
+
+          if npm view "${NAME}" version >/dev/null 2>&1; then
+            FLAGS=""
+          else
+            FLAGS="--access public"
+          fi
+
+          COMMIT_SHA=$(git rev-parse HEAD)
+          {
+            echo "name=${NAME}"
+            echo "version=${TARGET_VER}"
+            echo "tag=${TAG}"
+            echo "flags=${FLAGS}"
+            echo "published=${PUBLISHED}"
+            echo "commit_sha=${COMMIT_SHA}"
+          } >> "${GITHUB_OUTPUT}"

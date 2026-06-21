@@ -28,7 +28,7 @@ permissions:
 
 jobs:
   prepare_release:
-    uses: Plasius-LTD/plasius-ltd-site/.github/workflows/release-prepare.yml@main
+    uses: ./.github/workflows/release-prepare.yml
     with:
       bump: ${{ inputs.bump }}
       preid: ${{ inputs.preid }}

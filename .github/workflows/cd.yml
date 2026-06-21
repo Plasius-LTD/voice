@@ -61,10 +61,10 @@ jobs:
           set -euo pipefail
 
           PUBLISHED="${{ needs.prepare_release.outputs.published }}"
-          SHOULD_PUBLISH="true"
+          SHOULD_PUBLISH_NPM="true"
           SKIP_REASON=""
           if [ "${PUBLISHED}" = "true" ]; then
-            SHOULD_PUBLISH="false"
+            SHOULD_PUBLISH_NPM="false"
             SKIP_REASON="Package version ${{ needs.prepare_release.outputs.version }} is already published; nothing to release."
           fi
 
@@ -73,20 +73,21 @@ jobs:
             echo "release_version=${{ needs.prepare_release.outputs.version }}"
             echo "release_tag=${{ needs.prepare_release.outputs.tag }}"
             echo "flags=${{ needs.prepare_release.outputs.flags }}"
-            echo "should_publish=${SHOULD_PUBLISH}"
+            echo "should_publish_npm=${SHOULD_PUBLISH_NPM}"
+            echo "should_finalize_release=true"
             echo "skip_reason=${SKIP_REASON}"
           } >> "$GITHUB_OUTPUT"
 
       - name: Skip when package version is already published
-        if: steps.release.outputs.should_publish != 'true'
+        if: steps.release.outputs.should_publish_npm != 'true'
         run: echo "${{ steps.release.outputs.skip_reason }}"
 
       - name: Install dependencies
-        if: steps.release.outputs.should_publish == 'true'
+        if: steps.release.outputs.should_finalize_release == 'true'
         run: npm ci
 
       - name: Run validation
-        if: steps.release.outputs.should_publish == 'true'
+        if: steps.release.outputs.should_finalize_release == 'true'
         shell: bash
         run: |
           set -euo pipefail
@@ -107,18 +108,18 @@ jobs:
           if has_script pack:check; then npm run pack:check; fi
 
       - name: Generate SBOM (CycloneDX)
-        if: steps.release.outputs.should_publish == 'true'
+        if: steps.release.outputs.should_finalize_release == 'true'
         run: npm sbom --sbom-format=cyclonedx --sbom-type=library --omit dev > sbom.cdx.json
         continue-on-error: true
 
       - name: Attest SBOM
-        if: steps.release.outputs.should_publish == 'true' && hashFiles('sbom.cdx.json') != ''
+        if: steps.release.outputs.should_finalize_release == 'true' && hashFiles('sbom.cdx.json') != ''
         uses: actions/attest-build-provenance@v3
         with:
           subject-path: sbom.cdx.json
 
       - name: Ensure release tag points at prepared commit
-        if: steps.release.outputs.should_publish == 'true'
+        if: steps.release.outputs.should_finalize_release == 'true'
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           TAG: ${{ steps.release.outputs.release_tag }}
@@ -153,7 +154,7 @@ jobs:
           git push origin "${TAG}"
 
       - name: Create GitHub Release draft
-        if: steps.release.outputs.should_publish == 'true'
+        if: steps.release.outputs.should_finalize_release == 'true'
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           TAG: ${{ steps.release.outputs.release_tag }}
@@ -186,7 +187,7 @@ jobs:
           fi
 
       - name: Publish package
-        if: steps.release.outputs.should_publish == 'true'
+        if: steps.release.outputs.should_publish_npm == 'true'
         env:
           NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
           FLAGS: ${{ steps.release.outputs.flags }}
@@ -200,7 +201,7 @@ jobs:
           npm publish ${FLAGS} --provenance --registry https://registry.npmjs.org
 
       - name: Publish GitHub Release
-        if: steps.release.outputs.should_publish == 'true'
+        if: steps.release.outputs.should_finalize_release == 'true'
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           TAG: ${{ steps.release.outputs.release_tag }}

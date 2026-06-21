@@ -144,6 +144,12 @@ jobs:
             exit 1
           fi
 
+          FILE="${CHANGELOG_PATH}"
+          if [ ! -f "${FILE}" ]; then
+            echo "CHANGELOG.md is required for release metadata preparation." >&2
+            exit 1
+          fi
+
           REGISTRY_VER="$(npm view "${NAME}" version 2>/dev/null || true)"
           TAG_VER=$(
             git tag -l "${TAG_PREFIX}*" |
@@ -197,6 +203,9 @@ jobs:
           fi
 
           if [ "${BUMP}" = "none" ]; then
+            TARGET_VER="${CURRENT_VER}"
+          elif ! npm view "${NAME}@${CURRENT_VER}" version >/dev/null 2>&1 && grep -Eq "^## (\[${CURRENT_VER}\]|${CURRENT_VER})( |$)" "${FILE}"; then
+            echo "Reusing already-prepared unpublished version ${CURRENT_VER}."
             TARGET_VER="${CURRENT_VER}"
           else
             TARGET_VER=$(node -e '
@@ -271,12 +280,6 @@ jobs:
               echo "GitHub release ${TAG} is already published; cut a new version instead." >&2
               exit 1
             fi
-          fi
-
-          FILE="${CHANGELOG_PATH}"
-          if [ ! -f "${FILE}" ]; then
-            echo "CHANGELOG.md is required for release metadata preparation." >&2
-            exit 1
           fi
 
           if ! grep -q "^## \[${TARGET_VER}\]" "${FILE}"; then

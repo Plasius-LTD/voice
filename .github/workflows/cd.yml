@@ -35,6 +35,7 @@ jobs:
     with:
       bump: ${{ inputs.bump }}
       preid: ${{ inputs.preid }}
+      release_prep_app_client_id: ${{ vars.RELEASE_PREP_APP_CLIENT_ID }}
     secrets: inherit
 
   publish:

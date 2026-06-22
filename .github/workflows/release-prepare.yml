@@ -89,7 +89,6 @@ jobs:
         with:
           client-id: ${{ inputs.release_prep_app_client_id }}
           private-key: ${{ secrets.RELEASE_PREP_APP_PRIVATE_KEY }}
-          owner: ${{ github.repository_owner }}
           permission-contents: write
           permission-pull-requests: write
 

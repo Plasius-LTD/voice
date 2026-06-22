@@ -79,6 +79,16 @@ jobs:
           ref: ${{ inputs.base_branch }}
           fetch-depth: 0
 
+      - name: Create release-prep GitHub App token
+        id: release_prep_app_token
+        uses: actions/create-github-app-token@v3
+        with:
+          client-id: ${{ vars.RELEASE_PREP_APP_CLIENT_ID }}
+          private-key: ${{ secrets.RELEASE_PREP_APP_PRIVATE_KEY }}
+          owner: ${{ github.repository_owner }}
+          permission-contents: write
+          permission-pull-requests: write
+
       - name: Use Node.js 24
         uses: actions/setup-node@v4
         with:
@@ -95,9 +105,8 @@ jobs:
           CHANGELOG_PATH: ${{ inputs.changelog_path }}
           TAG_PREFIX: ${{ inputs.tag_prefix }}
           MERGE_TIMEOUT_SECONDS: ${{ inputs.merge_timeout_seconds }}
-          GITHUB_TOKEN: ${{ github.token }}
-          GH_TOKEN: ${{ secrets.RELEASE_PREP_TOKEN || github.token }}
-          RELEASE_PREP_TOKEN: ${{ secrets.RELEASE_PREP_TOKEN }}
+          GH_TOKEN: ${{ steps.release_prep_app_token.outputs.token }}
+          RELEASE_PREP_AUTH_TOKEN: ${{ steps.release_prep_app_token.outputs.token }}
         run: |
           set -euo pipefail
 
@@ -106,7 +115,7 @@ jobs:
             exit 1
           fi
 
-          AUTH_TOKEN="${RELEASE_PREP_TOKEN:-${GITHUB_TOKEN}}"
+          AUTH_TOKEN="${RELEASE_PREP_AUTH_TOKEN}"
           git remote set-url origin "https://x-access-token:${AUTH_TOKEN}@github.com/${GITHUB_REPOSITORY}.git"
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
@@ -374,11 +383,7 @@ jobs:
               echo "Release metadata pushed directly to ${BASE_BRANCH}."
             else
               BRANCH="release/${TAG}"
-              if [ -z "${RELEASE_PREP_TOKEN:-}" ]; then
-                echo "RELEASE_PREP_TOKEN is required when branch protection forces release metadata through a PR; github.token-created PRs do not reliably trigger required workflows." >&2
-                exit 1
-              fi
-              git remote set-url origin "https://x-access-token:${RELEASE_PREP_TOKEN}@github.com/${GITHUB_REPOSITORY}.git"
+              git remote set-url origin "https://x-access-token:${RELEASE_PREP_AUTH_TOKEN}@github.com/${GITHUB_REPOSITORY}.git"
               git fetch origin "refs/heads/${BRANCH}:refs/remotes/origin/${BRANCH}" || true
               git push --force-with-lease --set-upstream origin "HEAD:${BRANCH}"
 

@@ -9,6 +9,20 @@ The format is based on **[Keep a Changelog](https://keepachangelog.com/en/1.1.0/
 ## [Unreleased]
 
 - **Added**
+  - (placeholder)
+
+- **Changed**
+  - (placeholder)
+
+- **Fixed**
+  - (placeholder)
+
+- **Security**
+  - (placeholder)
+
+## [1.1.11] - 2026-06-22
+
+- **Added**
   - Remote speech recognition fallback support with fetch-backed and custom client adapters for browsers where Web Speech is unavailable or service-disabled.
   - Local speech recognition adapter support so native, WebGPU, WebAssembly, or app-shell recognizers can run before Web Speech or remote fallback.
   - `useSpeechRecognitionEngine`, `useRemoteSpeechEngine`, and remote recognition helper exports for provider-neutral speech-to-text integration.
@@ -488,7 +502,7 @@ The format is based on **[Keep a Changelog](https://keepachangelog.com/en/1.1.0/
 
 ---
 
-[Unreleased]: https://github.com/Plasius-LTD/voice/compare/v1.1.10...HEAD
+[Unreleased]: https://github.com/Plasius-LTD/voice/compare/v1.1.11...HEAD
 [1.0.0]: https://github.com/Plasius-LTD/voice/releases/tag/v1.0.0
 [1.0.4]: https://github.com/Plasius-LTD/voice/releases/tag/v1.0.4
 [1.0.5]: https://github.com/Plasius-LTD/voice/releases/tag/v1.0.5
@@ -530,3 +544,4 @@ The format is based on **[Keep a Changelog](https://keepachangelog.com/en/1.1.0/
 [1.1.8]: https://github.com/Plasius-LTD/voice/releases/tag/v1.1.8
 [1.1.9]: https://github.com/Plasius-LTD/voice/releases/tag/v1.1.9
 [1.1.10]: https://github.com/Plasius-LTD/voice/releases/tag/v1.1.10
+[1.1.11]: https://github.com/Plasius-LTD/voice/releases/tag/v1.1.11

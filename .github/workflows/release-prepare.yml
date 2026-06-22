@@ -11,6 +11,10 @@ on:
         description: "Pre-release id (for example beta or rc). Leave blank for stable."
         required: false
         type: string
+      release_prep_app_client_id:
+        description: "GitHub App client ID used to generate the release-prep installation token."
+        required: true
+        type: string
       base_branch:
         description: "Protected branch that must receive release metadata before publishing."
         required: false
@@ -83,7 +87,7 @@ jobs:
         id: release_prep_app_token
         uses: actions/create-github-app-token@v3
         with:
-          client-id: ${{ vars.RELEASE_PREP_APP_CLIENT_ID }}
+          client-id: ${{ inputs.release_prep_app_client_id }}
           private-key: ${{ secrets.RELEASE_PREP_APP_PRIVATE_KEY }}
           owner: ${{ github.repository_owner }}
           permission-contents: write

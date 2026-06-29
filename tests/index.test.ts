@@ -8,5 +8,7 @@ describe("index.ts exports", () => {
     expect(typeof index.useVoiceIntents).toBe("function");
     expect(typeof index.VoiceProvider).toBe("function");
     expect(typeof index.createGlobalVoiceStore).toBe("function");
+    expect(typeof index.parseSpellCastingUtterance).toBe("function");
+    expect(typeof index.createSpellCastingIntent).toBe("function");
   });
 });

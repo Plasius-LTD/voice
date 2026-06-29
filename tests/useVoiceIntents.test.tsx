@@ -57,6 +57,13 @@ describe("useVoiceIntents", () => {
     });
 
     await waitFor(() => expect(handler).toHaveBeenCalledTimes(1));
+    expect(handler).toHaveBeenCalledWith(
+      expect.objectContaining({
+        params: {
+          utterance: "add to cart two",
+        },
+      })
+    );
     expect(activate).not.toHaveBeenCalled();
     expect(getRegisteredIntentNames("shop")).toContain("cart.addItem");
     expect(trackSpy).toHaveBeenCalledWith("ui.voice", expect.objectContaining({

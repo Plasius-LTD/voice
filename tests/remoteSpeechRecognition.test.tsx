@@ -113,7 +113,11 @@ describe("remote speech recognition fallback", () => {
     );
     const client = createFetchRemoteRecognitionClient({
       endpoint: "/api/voice/speech-to-text",
+      fieldName: "audio",
       fetch: fetchMock as unknown as typeof fetch,
+      metadata: {
+        source: "search-panel",
+      },
     });
 
     const result = await client({
@@ -134,6 +138,20 @@ describe("remote speech recognition fallback", () => {
         body: expect.any(FormData),
       })
     );
+    const requestInit = fetchMock.mock.calls[0]?.[1] as RequestInit | undefined;
+    expect(requestInit).toBeDefined();
+    expect(requestInit?.method).toBe("POST");
+    const form = requestInit?.body as FormData;
+    const audio = form.get("audio");
+    expect(audio).toBeInstanceOf(File);
+    expect((audio as File).name).toBe("speech.webm");
+    expect((audio as File).type).toBe("audio/webm");
+    expect(form.get("lang")).toBe("en-GB");
+    expect(form.get("interim")).toBe("false");
+    expect(form.get("continuous")).toBe("false");
+    expect(form.get("sessionId")).toBe("session-1");
+    expect(form.get("mimeType")).toBe("audio/webm");
+    expect(form.get("source")).toBe("search-panel");
   });
 
   it("uses remote recognition when Web Speech is unavailable", async () => {

@@ -1,4 +1,7 @@
-import type { RegisteredIntent } from "./components/useVoiceIntents.js";
+import type {
+  IntentMeta,
+  RegisteredIntent,
+} from "./components/useVoiceIntents.js";
 
 export const SPELL_CASTING_FEATURE_FLAG_ID = "voice.spell-casting-mode.enabled";
 
@@ -12,8 +15,11 @@ export interface SpellCastingIntent {
 }
 
 export interface SpellCastingIntentMeta {
+  readonly lang?: IntentMeta["lang"];
+  readonly origin?: IntentMeta["origin"];
   readonly params?: Record<string, unknown>;
   readonly rawUtterance?: string;
+  readonly sessionId: IntentMeta["sessionId"];
 }
 
 export type SpellCastingIntentHandler = (
@@ -22,8 +28,12 @@ export type SpellCastingIntentHandler = (
 ) => ReturnType<RegisteredIntent["handler"]>;
 
 const CAST_SEPARATOR = " cast ";
+const COMMA_CAST_SEPARATOR = ", cast ";
 
-export const SPELL_CASTING_PATTERNS = Object.freeze(["cast"] as const);
+export const SPELL_CASTING_PATTERNS = Object.freeze([
+  /^\s*on\b.+(?:,\s*|\s+)cast\b.+/i,
+  /^\s*at\b.+(?:,\s*|\s+)cast\b.+/i,
+] as const);
 
 function normalizeSpeechSegment(value: string): string {
   return value.replace(/\s+/gu, " ").trim();
@@ -36,7 +46,14 @@ function parseDirectedCast(
 ): SpellCastingIntent | null {
   const body = normalized.slice(prefix.length).trim();
   const bodyLower = body.toLowerCase();
-  const castIndex = bodyLower.indexOf(CAST_SEPARATOR);
+  const explicitSeparatorIndex = bodyLower.indexOf(COMMA_CAST_SEPARATOR);
+  const castOccurrences = bodyLower.split(CAST_SEPARATOR).length - 1;
+  const castIndex =
+    explicitSeparatorIndex >= 0
+      ? explicitSeparatorIndex + 1
+      : castOccurrences === 1
+        ? bodyLower.indexOf(CAST_SEPARATOR)
+        : -1;
 
   if (castIndex <= 0) {
     return null;
@@ -97,7 +114,7 @@ export function createSpellCastingIntent(
       }
 
       return handler(intent, {
-        params: meta.params,
+        ...meta,
         rawUtterance,
       });
     },

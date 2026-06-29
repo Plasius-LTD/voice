@@ -348,7 +348,8 @@ const spellIntent = createSpellCastingIntent(async (intent, meta) => {
 
   await spellAuthority.queue(intent, {
     transcript: meta.rawUtterance,
-    sessionId: meta.params?.sessionId,
+    sessionId: meta.sessionId,
+    lang: meta.lang,
   });
   return "success";
 });
@@ -363,7 +364,8 @@ The helper currently recognizes two bounded command shapes:
 can be mounted with `registerVoiceIntents`, `VoiceIntents`, or
 `useAutoVoiceIntents`. The helper reads the original spoken transcript from
 `params.utterance`, which `useVoiceIntents` now forwards to registered intent
-handlers when a pattern match succeeds.
+handlers when a pattern match succeeds, while preserving the original
+`sessionId`, `origin`, and `lang` metadata on the handler `meta` object.
 
 ### Auto-registering intents with a component
 

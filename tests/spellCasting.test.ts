@@ -31,6 +31,17 @@ describe("spell casting voice helpers", () => {
     });
   });
 
+  it("uses the explicit cast separator when the target text contains cast", () => {
+    expect(
+      parseSpellCastingUtterance("On the cast iron gate, cast fireball")
+    ).toEqual({
+      effect: "fireball",
+      mode: "entity",
+      rawUtterance: "On the cast iron gate, cast fireball",
+      target: "the cast iron gate",
+    });
+  });
+
   it("returns null for non-casting utterances", () => {
     expect(parseSpellCastingUtterance("hello there")).toBeNull();
   });
@@ -57,6 +68,8 @@ describe("spell casting voice helpers", () => {
     await expect(
       Promise.resolve(intent.handler({
         sessionId: "session-1",
+        origin: "voice-demo",
+        lang: "en-GB",
         params: {
           utterance: "At 30m forward, cast a class 3 fireball",
         },
@@ -71,10 +84,13 @@ describe("spell casting voice helpers", () => {
         target: "30m forward",
       },
       {
+        lang: "en-GB",
+        origin: "voice-demo",
         params: {
           utterance: "At 30m forward, cast a class 3 fireball",
         },
         rawUtterance: "At 30m forward, cast a class 3 fireball",
+        sessionId: "session-1",
       }
     );
     expect(SPELL_CASTING_FEATURE_FLAG_ID).toBe("voice.spell-casting-mode.enabled");

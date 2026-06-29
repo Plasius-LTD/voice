@@ -57,6 +57,13 @@ describe("useVoiceIntents", () => {
     });
 
     await waitFor(() => expect(handler).toHaveBeenCalledTimes(1));
+    expect(handler).toHaveBeenCalledWith(
+      expect.objectContaining({
+        params: {
+          utterance: "add to cart two",
+        },
+      })
+    );
     expect(activate).not.toHaveBeenCalled();
     expect(getRegisteredIntentNames("shop")).toContain("cart.addItem");
     expect(trackSpy).toHaveBeenCalledWith("ui.voice", expect.objectContaining({
@@ -181,6 +188,42 @@ describe("useVoiceIntents", () => {
       expect.arrayContaining(["cart.removeItem"])
     );
 
+    unmount();
+  });
+
+  it("lets non-spell cast commands fall through to more specific registered intents", async () => {
+    const { useVoiceIntents, store } = await loadModules();
+    const { createSpellCastingIntent } = await import("../src/spellCasting.js");
+    const genericCastHandler = vi.fn().mockReturnValue("success");
+
+    const { result, unmount } = renderHook(() =>
+      useVoiceIntents({ origin: "arena", lang: "en-US" })
+    );
+
+    act(() =>
+      result.current.registerVoiceIntents("arena", [
+        createSpellCastingIntent(vi.fn().mockReturnValue("success")),
+        {
+          name: "spell.cast.fireball",
+          patterns: ["cast fireball"],
+          handler: genericCastHandler,
+        },
+      ])
+    );
+
+    act(() => {
+      store.dispatch({ type: "EVT/START" });
+      store.dispatch({ type: "EVT/FINAL", payload: { text: "cast fireball at goblin" } });
+    });
+
+    await waitFor(() => expect(genericCastHandler).toHaveBeenCalledTimes(1));
+    expect(genericCastHandler).toHaveBeenCalledWith(
+      expect.objectContaining({
+        params: {
+          utterance: "cast fireball at goblin",
+        },
+      })
+    );
     unmount();
   });
 });

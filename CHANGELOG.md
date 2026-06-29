@@ -9,10 +9,12 @@ The format is based on **[Keep a Changelog](https://keepachangelog.com/en/1.1.0/
 ## [Unreleased]
 
 - **Added**
+  - Spell casting utterance parsing helpers and a reusable registered intent factory for MCC-style spoken spell declarations.
   - (placeholder)
 
 - **Changed**
   - Refreshed the published `@plasius/nfr`, `@plasius/react-state`, and `@plasius/translations` dependencies to their latest released versions.
+  - Registered intent handlers now receive the matched spoken utterance in `params.utterance` so scoped parsers can inspect the original transcript.
   - (placeholder)
 
 - **Fixed**

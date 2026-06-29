@@ -54,3 +54,13 @@ export {
   type RemoteSpeechRecognitionResult,
   type FetchRemoteRecognitionClientOptions,
 } from "./engine/remoteSpeechRecognition.js";
+export {
+  createSpellCastingIntent,
+  parseSpellCastingUtterance,
+  SPELL_CASTING_FEATURE_FLAG_ID,
+  SPELL_CASTING_PATTERNS,
+  type SpellCastingIntent,
+  type SpellCastingIntentHandler,
+  type SpellCastingIntentMeta,
+  type SpellCastingTargetMode,
+} from "./spellCasting.js";

@@ -317,6 +317,56 @@ unregisterVoiceIntents("CartPage", ["cart.addItem"]);
 
 This lets you scope voice commands by page (or use `"*"` as the origin for global commands).
 
+### Spell casting helpers
+
+`@plasius/voice` also exports a small helper surface for spoken spell
+declarations. This keeps spell-grammar parsing close to the voice-intent layer
+while letting host apps own the actual game or simulation action.
+
+```ts
+import {
+  createSpellCastingIntent,
+  parseSpellCastingUtterance,
+  SPELL_CASTING_FEATURE_FLAG_ID,
+} from "@plasius/voice";
+
+const parsed = parseSpellCastingUtterance(
+  "At the marked point, cast a class 5 stabiliser field"
+);
+
+// {
+//   mode: "location",
+//   target: "the marked point",
+//   effect: "a class 5 stabiliser field",
+//   rawUtterance: "At the marked point, cast a class 5 stabiliser field"
+// }
+
+const spellIntent = createSpellCastingIntent(async (intent, meta) => {
+  if (!featureFlags[SPELL_CASTING_FEATURE_FLAG_ID]) {
+    return "no-match";
+  }
+
+  await spellAuthority.queue(intent, {
+    transcript: meta.rawUtterance,
+    sessionId: meta.sessionId,
+    lang: meta.lang,
+  });
+  return "success";
+});
+```
+
+The helper currently recognizes two bounded command shapes:
+
+- `On <target>, cast <effect>` for entity-directed casting.
+- `At <target>, cast <effect>` for location-directed casting.
+
+`createSpellCastingIntent(...)` returns a normal registered intent object, so it
+can be mounted with `registerVoiceIntents`, `VoiceIntents`, or
+`useAutoVoiceIntents`. The helper reads the original spoken transcript from
+`params.utterance`, which `useVoiceIntents` now forwards to registered intent
+handlers when a pattern match succeeds, while preserving the original
+`sessionId`, `origin`, and `lang` metadata on the handler `meta` object.
+
 ### Auto-registering intents with a component
 
 ```tsx

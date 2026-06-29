@@ -359,9 +359,9 @@ function resolveRegisteredIntent(
             `\\b${p.replace(/[.*+?^${}()|[\\]\\]/g, "\\$&").replace(/\\s+/g, "\\s+")}\\b`,
             "i"
           );
-          if (re.test(hay)) return { name: i.name };
+          if (re.test(hay)) return { name: i.name, params: { utterance: text } };
         } else if (p.test(hay)) {
-          return { name: i.name };
+          return { name: i.name, params: { utterance: text } };
         }
       }
     }

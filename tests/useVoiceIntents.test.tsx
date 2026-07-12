@@ -226,21 +226,114 @@ describe("useVoiceIntents", () => {
     );
     unmount();
   });
+
+  it("routes only commands for the focused pane and allowed command families", async () => {
+    const { useVoiceIntents, store } = await loadModules();
+    const statusHandler = vi.fn().mockReturnValue("success");
+    const missionHandler = vi.fn().mockReturnValue("success");
+
+    const { result, unmount } = renderHook(() =>
+      useVoiceIntents({
+        origin: "player-system",
+        focusedPane: "status",
+        allowedCommandFamilies: ["status"],
+      })
+    );
+
+    act(() =>
+      result.current.registerVoiceIntents("player-system", [
+        {
+          name: "status.read",
+          patterns: ["read status"],
+          scope: { focusedPanes: ["status"], commandFamily: "status" },
+          handler: statusHandler,
+        },
+        {
+          name: "mission.open",
+          patterns: ["open mission"],
+          scope: { focusedPanes: ["missions"], commandFamily: "mission" },
+          handler: missionHandler,
+        },
+      ])
+    );
+
+    act(() => {
+      store.dispatch({ type: "EVT/START" });
+      store.dispatch({ type: "EVT/FINAL", payload: { text: "open mission" } });
+    });
+
+    await waitFor(() => expect(missionHandler).not.toHaveBeenCalled());
+
+    act(() => {
+      store.dispatch({ type: "EVT/FINAL", payload: { text: "read status" } });
+    });
+
+    await waitFor(() => expect(statusHandler).toHaveBeenCalledTimes(1));
+    unmount();
+  });
+
+  it("fails closed to intents explicitly allowed in combat-safe mode", async () => {
+    const { useVoiceIntents, store } = await loadModules();
+    const safeHandler = vi.fn().mockReturnValue("success");
+    const unsafeHandler = vi.fn().mockReturnValue("success");
+
+    const { result, unmount } = renderHook(() =>
+      useVoiceIntents({
+        origin: "player-system",
+        focusedPane: "status",
+        combatSafe: true,
+      })
+    );
+
+    act(() =>
+      result.current.registerVoiceIntents("player-system", [
+        {
+          name: "status.combat",
+          patterns: ["read combat status"],
+          scope: {
+            focusedPanes: ["status"],
+            commandFamily: "status",
+            allowInCombatSafe: true,
+          },
+          handler: safeHandler,
+        },
+        {
+          name: "mission.open",
+          patterns: ["open mission"],
+          scope: { focusedPanes: ["status"], commandFamily: "mission" },
+          handler: unsafeHandler,
+        },
+      ])
+    );
+
+    act(() => {
+      store.dispatch({ type: "EVT/START" });
+      store.dispatch({ type: "EVT/FINAL", payload: { text: "open mission" } });
+    });
+    await waitFor(() => expect(unsafeHandler).not.toHaveBeenCalled());
+
+    act(() => {
+      store.dispatch({ type: "EVT/FINAL", payload: { text: "read combat status" } });
+    });
+    await waitFor(() => expect(safeHandler).toHaveBeenCalledTimes(1));
+    unmount();
+  });
 });
 
 describe("VoiceIntents component", () => {
   it("registers and unregisters intents when toggled", async () => {
     const registerVoiceIntents = vi.fn();
     const unregisterVoiceIntents = vi.fn();
+    const useVoiceIntentsMock = vi.fn(() => ({
+      registerVoiceIntents,
+      unregisterVoiceIntents,
+    }));
 
     vi.doMock("../src/components/useVoiceIntents.js", async () => {
       const actual = await vi.importActual<any>("../src/components/useVoiceIntents.js");
       return {
         ...actual,
-        useVoiceIntents: () => ({
-          registerVoiceIntents,
-          unregisterVoiceIntents,
-        }),
+        useVoiceIntents: useVoiceIntentsMock,
       };
     });
 
@@ -253,11 +346,23 @@ describe("VoiceIntents component", () => {
 
     const { unmount, rerender } = render(
       <VoiceProvider>
-        <VoiceIntents origin="demo" intents={intents} enabled />
+        <VoiceIntents
+          origin="demo"
+          intents={intents}
+          enabled
+          focusedPane="status"
+          combatSafe
+          allowedCommandFamilies={["status"]}
+        />
       </VoiceProvider>
     );
 
     expect(registerVoiceIntents).toHaveBeenCalledWith("demo", intents);
+    expect(useVoiceIntentsMock).toHaveBeenCalledWith({
+      focusedPane: "status",
+      combatSafe: true,
+      allowedCommandFamilies: ["status"],
+    });
 
     rerender(
       <VoiceProvider>

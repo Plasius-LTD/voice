@@ -9,6 +9,8 @@ The format is based on **[Keep a Changelog](https://keepachangelog.com/en/1.1.0/
 ## [Unreleased]
 
 - **Added**
+  - Focused-pane and command-family intent scopes with fail-closed combat-safe routing.
+  - Reactive listening and push-to-talk state helpers for System-focused surfaces.
   - (placeholder)
 
 - **Changed**

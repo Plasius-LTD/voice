@@ -317,6 +317,38 @@ unregisterVoiceIntents("CartPage", ["cart.addItem"]);
 
 This lets you scope voice commands by page (or use `"*"` as the origin for global commands).
 
+For focused surfaces such as the Player System, add a runtime scope to each
+registration and pass the active routing context to `useVoiceIntents`. Pane
+scopes are opt-in, and combat-safe mode fails closed unless an intent explicitly
+allows itself in that mode:
+
+```tsx
+const intents = useVoiceIntents({
+  origin: "player-system",
+  focusedPane: "status",
+  allowedCommandFamilies: ["status", "narration"],
+  combatSafe: isCombatSafe,
+});
+
+intents.registerVoiceIntents("player-system", [
+  {
+    name: "status.read",
+    patterns: ["read combat status"],
+    scope: {
+      focusedPanes: ["status"],
+      commandFamily: "status",
+      allowInCombatSafe: true,
+    },
+    handler: readCombatStatus,
+  },
+]);
+```
+
+`useVoiceControl` exposes reactive `listening`, `wantListening`, `pttActive`,
+and `pttPressed` fields plus `getListeningState()`. These can drive a focused
+System surface while the existing `pttButtonProps` continues to provide the
+accessible push-to-talk button bindings.
+
 ### Spell casting helpers
 
 `@plasius/voice` also exports a small helper surface for spoken spell

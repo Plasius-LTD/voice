@@ -80,6 +80,12 @@ export type UseVoiceControlOptions = {
 };
 
 export type VoiceControlAPI = {
+  /** Latest recognition/desired-listening state for focused host surfaces. */
+  listening: boolean;
+  wantListening: boolean;
+  pttActive: boolean;
+  pttPressed: boolean;
+  getListeningState(): VoiceListeningState;
   // Control functions
   setMuted(value: boolean): void;
   setVolume(value: number): void;
@@ -106,6 +112,13 @@ export type VoiceControlAPI = {
   start(): void;
   stop(): void;
   dispose(): void;
+};
+
+export type VoiceListeningState = {
+  listening: boolean;
+  wantListening: boolean;
+  pttActive: boolean;
+  pttPressed: boolean;
 };
 
 const clamp01 = (n: number) =>
@@ -382,6 +395,28 @@ export function useVoiceControl(
     globalStore.subscribe,
     () => globalStore.getState().pttActive
   );
+  const listening = useSyncExternalStore(
+    globalStore.subscribe,
+    () => globalStore.getState().listening
+  );
+  const wantListening = useSyncExternalStore(
+    globalStore.subscribe,
+    () => globalStore.getState().wantListening
+  );
+  const pttPressed = useSyncExternalStore(
+    globalStore.subscribe,
+    () => globalStore.getState().pttPressed
+  );
+
+  const getListeningState = (): VoiceListeningState => {
+    const current = globalStore.getState();
+    return {
+      listening: current.listening,
+      wantListening: current.wantListening,
+      pttActive: current.pttActive,
+      pttPressed: current.pttPressed,
+    };
+  };
 
   const pttButtonProps = useMemo(
     () => ({
@@ -421,6 +456,11 @@ export function useVoiceControl(
   const state = globalStore.getState();
 
   return {
+    listening,
+    wantListening,
+    pttActive,
+    pttPressed,
+    getListeningState,
     // controls
     setMuted,
     setVolume,

@@ -1,5 +1,5 @@
 // useVoice.ts — slim adapter: initialize engine, expose status, and process intents
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { track } from "@plasius/nfr";
 import {
   globalVoiceStore as defaultGlobalVoiceStore,
@@ -17,6 +17,12 @@ export type VoiceIntentOpts = {
   continuous?: boolean; // keep listening until stopped (optional)
   redact?: (t: string) => string; // optional PII redaction
   autoStart?: boolean; // start recognition on mount; default false
+  /** Active host surface/pane used to filter pane-scoped registrations. */
+  focusedPane?: string | null;
+  /** Restrict matching to intents explicitly approved for combat-safe use. */
+  combatSafe?: boolean;
+  /** Optional allow-list for registered command families. */
+  allowedCommandFamilies?: readonly string[];
   globalStore?: GlobalVoiceStore; // override store (for composition/testing)
   activate?: (
     intent: string,
@@ -68,6 +74,23 @@ export type RegisteredIntent = {
   name: string;
   patterns?: (string | RegExp)[];
   handler: IntentHandler;
+  /** Optional runtime scope for focused panes and bounded command routing. */
+  scope?: VoiceIntentScope;
+};
+
+export type VoiceIntentScope = {
+  /** One or more focused panes where this registration may be resolved. */
+  focusedPanes?: readonly string[];
+  /** Host-defined family used by combat-safe and allow-list filtering. */
+  commandFamily?: string;
+  /** Must be true for this intent to resolve while combat-safe mode is active. */
+  allowInCombatSafe?: boolean;
+};
+
+export type VoiceIntentContext = {
+  focusedPane?: string | null;
+  combatSafe?: boolean;
+  allowedCommandFamilies?: readonly string[];
 };
 
 // Keyed by origin ("*" = global)
@@ -111,6 +134,37 @@ export function getRegisteredIntentNames(origin?: string): string[] {
   return Array.from(names);
 }
 
+/**
+ * Returns whether a registered intent is safe for the current host context.
+ * Combat-safe routing intentionally fails closed: registrations must opt in.
+ */
+export function isVoiceIntentAllowed(
+  intent: RegisteredIntent,
+  context: VoiceIntentContext = {}
+): boolean {
+  const scope = intent.scope;
+
+  if (scope?.focusedPanes) {
+    if (!context.focusedPane || !scope.focusedPanes.includes(context.focusedPane)) {
+      return false;
+    }
+  }
+
+  if (
+    scope?.commandFamily &&
+    context.allowedCommandFamilies &&
+    !context.allowedCommandFamilies.includes(scope.commandFamily)
+  ) {
+    return false;
+  }
+
+  if (context.combatSafe && scope?.allowInCombatSafe !== true) {
+    return false;
+  }
+
+  return true;
+}
+
 // Test-only helper to reset registry between runs to avoid leaked handlers in jsdom/Vitest.
 export function __clearIntentRegistryForTests() {
   intentRegistry.clear();
@@ -127,8 +181,15 @@ export function useVoiceIntents(opts: VoiceIntentOpts = {}): VoiceIntentView {
     continuous = false,
     redact,
     autoStart = false,
+    focusedPane = null,
+    combatSafe = false,
+    allowedCommandFamilies,
     activate,
   } = opts;
+  const allowedCommandFamiliesKey = useMemo(
+    () => allowedCommandFamilies?.join("\u0000"),
+    [allowedCommandFamilies]
+  );
   const store = opts.globalStore ?? defaultGlobalVoiceStore;
   const safeTrack = useCallback((...args: Parameters<typeof track>) => {
     try {
@@ -254,7 +315,12 @@ export function useVoiceIntents(opts: VoiceIntentOpts = {}): VoiceIntentView {
       if (s.transcript && s.transcript !== prevFinalRef.current) {
         prevFinalRef.current = s.transcript;
         const text = redact ? redact(s.transcript) : s.transcript;
-        const inferred = inferIntent(text, origin);
+        const context: VoiceIntentContext = {
+          focusedPane,
+          combatSafe,
+          allowedCommandFamilies,
+        };
+        const inferred = inferIntent(text, origin, context);
         safeTrack("ui.voice", {
           phase: "final",
           origin,
@@ -275,7 +341,9 @@ export function useVoiceIntents(opts: VoiceIntentOpts = {}): VoiceIntentView {
             intentRegistry.get("*"),
           ].filter(Boolean) as RegisteredIntent[][];
           for (const list of lists) {
-            const match = list.find((i) => i.name === inferred.name)?.handler;
+            const match = list.find(
+              (i) => i.name === inferred.name && isVoiceIntentAllowed(i, context)
+            )?.handler;
             if (match)
               return match({
                 sessionId: localSessionRef.current.sessionId!,
@@ -329,7 +397,23 @@ export function useVoiceIntents(opts: VoiceIntentOpts = {}): VoiceIntentView {
     return () => {
       unsub();
     };
-  }, [lang, interim, continuous, origin, redact, activate, startVoice, stopVoice, store, ensureSessionId, safeTrack]);
+  }, [
+    lang,
+    interim,
+    continuous,
+    origin,
+    redact,
+    autoStart,
+    focusedPane,
+    combatSafe,
+    allowedCommandFamiliesKey,
+    activate,
+    startVoice,
+    stopVoice,
+    store,
+    ensureSessionId,
+    safeTrack,
+  ]);
 
   // Auto-start on mount (if supported) — adapter sends requests; engine elsewhere handles them
   useEffect(() => {
@@ -346,12 +430,14 @@ export function useVoiceIntents(opts: VoiceIntentOpts = {}): VoiceIntentView {
 // ──────────────────────────────────────────────────────────────────────────────
 function resolveRegisteredIntent(
   text: string,
-  origin?: string
+  origin?: string,
+  context: VoiceIntentContext = {}
 ): { name: string; params?: Record<string, unknown> } | null {
   const hay = text.toLowerCase();
   const testList = (list?: RegisteredIntent[]) => {
     if (!list) return null;
     for (const i of list) {
+      if (!isVoiceIntentAllowed(i, context)) continue;
       if (!i.patterns || i.patterns.length === 0) continue;
       for (const p of i.patterns) {
         if (typeof p === "string") {
@@ -376,9 +462,10 @@ function resolveRegisteredIntent(
 
 function inferIntent(
   text: string,
-  origin?: string
+  origin?: string,
+  context: VoiceIntentContext = {}
 ): { name: string; params?: Record<string, unknown> } {
-  return resolveRegisteredIntent(text, origin) ?? defaultInferIntent(text);
+  return resolveRegisteredIntent(text, origin, context) ?? defaultInferIntent(text);
 }
 
 function defaultInferIntent(text: string): {

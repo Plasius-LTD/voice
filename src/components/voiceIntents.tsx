@@ -1,6 +1,10 @@
 // File: voice/src/components/voiceIntents.tsx
 import React, { useEffect, useRef } from "react";
-import { useVoiceIntents, type IntentHandler } from "./useVoiceIntents.js";
+import {
+  useVoiceIntents,
+  type IntentHandler,
+  type VoiceIntentScope,
+} from "./useVoiceIntents.js";
 import { VoiceProvider, useVoiceContext } from "./voiceProvider.js";
 
 export type IntentSpec = {
@@ -10,6 +14,8 @@ export type IntentSpec = {
   patterns: (string | RegExp)[];
   /** Handler invoked when the intent matches. Return a result object/promise. */
   handler: IntentHandler;
+  /** Optional focused-pane, command-family, and combat-safe routing policy. */
+  scope?: VoiceIntentScope;
 };
 
 export type VoiceIntentsProps = {
@@ -19,6 +25,12 @@ export type VoiceIntentsProps = {
   intents: IntentSpec[];
   /** Toggle registration on/off without unmounting */
   enabled?: boolean;
+  /** Active host surface/pane used to filter pane-scoped registrations. */
+  focusedPane?: string | null;
+  /** Restrict matching to intents explicitly approved for combat-safe use. */
+  combatSafe?: boolean;
+  /** Optional allow-list for registered command families. */
+  allowedCommandFamilies?: readonly string[];
 };
 
 /**
@@ -31,9 +43,16 @@ const VoiceIntentsInner: React.FC<VoiceIntentsProps> = ({
   origin,
   intents,
   enabled = true,
+  focusedPane,
+  combatSafe,
+  allowedCommandFamilies,
 }) => {
   const registeredNamesRef = useRef<string[] | null>(null);
-  const { unregisterVoiceIntents, registerVoiceIntents } = useVoiceIntents();
+  const { unregisterVoiceIntents, registerVoiceIntents } = useVoiceIntents({
+    focusedPane,
+    combatSafe,
+    allowedCommandFamilies,
+  });
 
   useEffect(() => {
     if (!enabled) {

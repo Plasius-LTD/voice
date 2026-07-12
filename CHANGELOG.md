@@ -9,6 +9,20 @@ The format is based on **[Keep a Changelog](https://keepachangelog.com/en/1.1.0/
 ## [Unreleased]
 
 - **Added**
+  - (placeholder)
+
+- **Changed**
+  - (placeholder)
+
+- **Fixed**
+  - (placeholder)
+
+- **Security**
+  - (placeholder)
+
+## [1.2.0] - 2026-07-12
+
+- **Added**
   - Focused-pane and command-family intent scopes with fail-closed combat-safe routing.
   - Reactive listening and push-to-talk state helpers for System-focused surfaces.
   - (placeholder)
@@ -521,7 +535,7 @@ The format is based on **[Keep a Changelog](https://keepachangelog.com/en/1.1.0/
 
 ---
 
-[Unreleased]: https://github.com/Plasius-LTD/voice/compare/v1.1.12...HEAD
+[Unreleased]: https://github.com/Plasius-LTD/voice/compare/v1.2.0...HEAD
 [1.0.0]: https://github.com/Plasius-LTD/voice/releases/tag/v1.0.0
 [1.0.4]: https://github.com/Plasius-LTD/voice/releases/tag/v1.0.4
 [1.0.5]: https://github.com/Plasius-LTD/voice/releases/tag/v1.0.5
@@ -565,3 +579,4 @@ The format is based on **[Keep a Changelog](https://keepachangelog.com/en/1.1.0/
 [1.1.10]: https://github.com/Plasius-LTD/voice/releases/tag/v1.1.10
 [1.1.11]: https://github.com/Plasius-LTD/voice/releases/tag/v1.1.11
 [1.1.12]: https://github.com/Plasius-LTD/voice/releases/tag/v1.1.12
+[1.2.0]: https://github.com/Plasius-LTD/voice/releases/tag/v1.2.0

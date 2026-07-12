@@ -18,6 +18,12 @@ export type {
   VoiceIntentsProps,
 } from "./components/voiceIntents.js";
 export {
+  isVoiceIntentAllowed,
+  type VoiceIntentContext,
+  type RegisteredIntent,
+  type VoiceIntentScope,
+} from "./components/useVoiceIntents.js";
+export {
   createGlobalVoiceStore,
   globalVoiceStore,
   type GlobalVoiceStore,

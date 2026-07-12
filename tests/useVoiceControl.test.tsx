@@ -39,7 +39,15 @@ describe("useVoiceControl", () => {
 
   it("responds to keyboard PTT events when enabled", () => {
     const store = createGlobalVoiceStore({ pttEnabled: true, pttHold: true });
-    renderHook(() => useVoiceControl({ globalStore: store }));
+    const { result } = renderHook(() => useVoiceControl({ globalStore: store }));
+
+    expect(result.current.listening).toBe(false);
+    expect(result.current.getListeningState()).toMatchObject({
+      listening: false,
+      wantListening: false,
+      pttActive: false,
+      pttPressed: false,
+    });
 
     act(() => {
       window.dispatchEvent(
@@ -49,6 +57,17 @@ describe("useVoiceControl", () => {
 
     expect(store.getState().pttPressed).toBe(true);
     expect(store.getState().wantListening).toBe(true);
+    expect(result.current.getListeningState()).toMatchObject({
+      wantListening: true,
+      pttActive: true,
+      pttPressed: true,
+    });
+
+    act(() => {
+      store.dispatch({ type: "EVT/START" });
+    });
+    expect(result.current.listening).toBe(true);
+    expect(result.current.getListeningState().listening).toBe(true);
 
     act(() => {
       window.dispatchEvent(new KeyboardEvent("keyup", { code: "Space" }));

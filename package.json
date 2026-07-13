@@ -49,7 +49,7 @@
   "dependencies": {
     "@plasius/nfr": "^1.0.12",
     "@plasius/react-state": "^1.2.17",
-    "@plasius/translations": "^1.0.22"
+    "@plasius/translations": "^1.0.23"
   },
   "peerDependencies": {
     "react": "^19"

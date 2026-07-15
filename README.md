@@ -349,6 +349,11 @@ and `pttPressed` fields plus `getListeningState()`. These can drive a focused
 System surface while the existing `pttButtonProps` continues to provide the
 accessible push-to-talk button bindings.
 
+Player System voice routing inherits the remotely evaluated
+`harmony.player-system.audio.enabled` flag. Hosts must keep the flag disabled
+until their Harmony namespace migration is complete, and disable it to roll
+back focused/combat-safe voice adoption without changing package code.
+
 ### Spell casting helpers
 
 `@plasius/voice` also exports a small helper surface for spoken spell

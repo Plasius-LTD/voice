@@ -12,7 +12,7 @@ The format is based on **[Keep a Changelog](https://keepachangelog.com/en/1.1.0/
   - (placeholder)
 
 - **Changed**
-  - (placeholder)
+  - Updated active Player System voice-routing documentation to the Project Harmony audio rollout key and added a closure test for canonical README/ADR/TDR references.
 
 - **Fixed**
   - (placeholder)

@@ -54,6 +54,6 @@ remain available in combat-safe mode; only unsafe intent resolution is removed.
 ## Rollout and Testing
 
 The inherited Player System rollout flag is
-`isekai.player-system.audio.enabled`; hosts must use its remote enable/disable
+`harmony.player-system.audio.enabled`; hosts must use its remote enable/disable
 and rollback path. Tests cover focused-pane routing, command-family filtering,
 combat-safe fail-closed behavior, and live listening/PTT state exposure.

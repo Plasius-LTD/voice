@@ -40,7 +40,7 @@ jobs:
 
   publish:
     needs: prepare_release
-    runs-on: ubuntu-latest
+    runs-on: ${{ fromJSON(vars.CD_RUNNER_LABELS || '["self-hosted","Linux","X64"]') }}
     environment: production
     steps:
       - name: Checkout prepared release commit
@@ -107,6 +107,38 @@ jobs:
             npm test
           fi
           if has_script pack:check; then npm run pack:check; fi
+
+      - name: Locate coverage report for Codecov
+        id: codecov_coverage
+        if: steps.release.outputs.should_finalize_release == 'true'
+        shell: bash
+        run: |
+          set -euo pipefail
+          LCOV_FILE="$(find coverage -type f -name lcov.info | head -n 1 || true)"
+          if [ -z "${LCOV_FILE}" ] || [ ! -f "${LCOV_FILE}" ]; then
+            echo "No lcov.info found; skipping Codecov upload."
+            echo "available=false" >> "${GITHUB_OUTPUT}"
+            exit 0
+          fi
+          echo "Using coverage report: ${LCOV_FILE}"
+          echo "available=true" >> "${GITHUB_OUTPUT}"
+          echo "files=${LCOV_FILE}" >> "${GITHUB_OUTPUT}"
+
+      - name: Upload coverage to Codecov (best effort)
+        id: codecov
+        if: steps.release.outputs.should_finalize_release == 'true' && steps.codecov_coverage.outputs.available == 'true'
+        continue-on-error: true
+        uses: codecov/codecov-action@v4
+        with:
+          token: ${{ secrets.CODECOV_TOKEN }}
+          files: ${{ steps.codecov_coverage.outputs.files }}
+          flags: unittests
+          fail_ci_if_error: false
+          slug: ${{ github.repository }}
+
+      - name: Report Codecov upload warning
+        if: always() && steps.codecov.outcome == 'failure'
+        run: echo "::warning title=Codecov upload unavailable::Release coverage upload failed or was quota-limited; release validation and publication will continue."
 
       - name: Generate SBOM (CycloneDX)
         if: steps.release.outputs.should_finalize_release == 'true'

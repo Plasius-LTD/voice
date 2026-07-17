@@ -33,8 +33,13 @@ jobs:
             const fallbackRunner = process.env.FALLBACK_RUNNER_LABEL
             let selectedRunnerJson = JSON.stringify(fallbackRunner)
 
-            if (context.eventName === "pull_request") {
-              core.info(`Pull request CI always uses ${fallbackRunner}.`)
+            const isForkPullRequest =
+              context.eventName === "pull_request" &&
+              context.payload.pull_request?.head?.repo?.full_name !==
+                `${context.repo.owner}/${context.repo.repo}`
+
+            if (isForkPullRequest) {
+              core.info(`Fork pull request CI uses ${fallbackRunner} to protect the self-hosted runner.`)
               core.setOutput("runner_labels", selectedRunnerJson)
               return
             }
@@ -155,12 +160,3 @@ jobs:
             echo "Coverage gate failed: ${PCT}% < 80%"
             exit 1
           }
-
-      - name: Upload coverage to Codecov
-        uses: codecov/codecov-action@v4
-        with:
-          token: ${{ secrets.CODECOV_TOKEN }}
-          files: ${{ env.LCOV_FILE }}
-          flags: unittests
-          fail_ci_if_error: true
-          slug: ${{ github.repository }}

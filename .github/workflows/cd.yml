@@ -40,7 +40,7 @@ jobs:
 
   publish:
     needs: prepare_release
-    runs-on: ${{ fromJSON(vars.CD_RUNNER_LABELS || '["self-hosted","Linux","X64"]') }}
+    runs-on: ubuntu-latest
     environment: production
     steps:
       - name: Checkout prepared release commit

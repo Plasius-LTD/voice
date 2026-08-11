@@ -10,6 +10,8 @@ accepting CI evidence for another source snapshot.
 
 ## Decision
 
+Publication is phase-isolated: dependency installation, package validation, SBOM generation, and immutable tarball packing run in `validate_and_pack` without the `production` environment or OIDC permission. The final hosted `publish` job downloads only that sealed artifact, explicitly installs npm 11.6.2, runs no repository dependency code, and publishes the tarball with lifecycle scripts disabled. It re-fetches current `main` immediately before the first release mutation and again immediately before npm publication. `.npmrc` contains no registry-auth placeholder, and release preparation returns the reviewed current `main` HEAD rather than package-file history.
+
 Publish only from the GitHub-hosted `production` job using npm trusted
 publishing. Prove the prepared SHA is still the exact remote `main` head and
 that push-triggered `ci.yml` succeeded for it. Require Node 24 and npm 11.5.1 or

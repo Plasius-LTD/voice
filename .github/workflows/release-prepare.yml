@@ -40,6 +40,10 @@ on:
         required: false
         type: string
         default: "1200"
+    secrets:
+      RELEASE_PREP_APP_PRIVATE_KEY:
+        description: "Private key for the narrowly scoped release-preparation GitHub App."
+        required: true
     outputs:
       name:
         description: "npm package name"
@@ -59,11 +63,12 @@ on:
       commit_sha:
         description: "main commit containing the release metadata"
         value: ${{ jobs.prepare.outputs.commit_sha }}
+      effective_preid:
+        description: "npm distribution tag identity derived from the prepared package version"
+        value: ${{ jobs.prepare.outputs.effective_preid }}
 
 permissions:
-  contents: write
-  pull-requests: write
-  actions: read
+  contents: read
 
 jobs:
   prepare:
@@ -76,12 +81,14 @@ jobs:
       flags: ${{ steps.release.outputs.flags }}
       published: ${{ steps.release.outputs.published }}
       commit_sha: ${{ steps.release.outputs.commit_sha }}
+      effective_preid: ${{ steps.release.outputs.effective_preid }}
     steps:
       - name: Checkout main
-        uses: actions/checkout@v4
+        uses: actions/checkout@v6
         with:
           ref: ${{ inputs.base_branch }}
           fetch-depth: 0
+          persist-credentials: false
 
       - name: Create release-prep GitHub App token
         id: release_prep_app_token
@@ -93,10 +100,10 @@ jobs:
           permission-pull-requests: write
 
       - name: Use Node.js 24
-        uses: actions/setup-node@v4
+        uses: actions/setup-node@v6
         with:
           node-version-file: '.nvmrc'
-          cache: 'npm'
+          package-manager-cache: false
 
       - name: Prepare and land release metadata
         id: release
@@ -283,9 +290,9 @@ jobs:
           process.stdout.write(version);
           ' "${CURRENT_VER}" "${REGISTRY_VER}" "${TAG_VER}" "${BUMP}" "${PREID:-}")
             if [ "${PACKAGE_DIRECTORY}" = "." ]; then
-              npm version "${TARGET_VER}" --no-git-tag-version --allow-same-version
+              npm version "${TARGET_VER}" --ignore-scripts --no-git-tag-version --allow-same-version
             else
-              npm version "${TARGET_VER}" --workspace "${PACKAGE_DIRECTORY}" --no-git-tag-version --allow-same-version
+              npm version "${TARGET_VER}" --workspace "${PACKAGE_DIRECTORY}" --ignore-scripts --no-git-tag-version --allow-same-version
             fi
           fi
 
@@ -382,58 +389,47 @@ jobs:
           else
             git commit -m "chore: prepare release ${TAG}"
 
-            if git push origin "HEAD:${BASE_BRANCH}"; then
-              echo "Release metadata pushed directly to ${BASE_BRANCH}."
-            else
-              BRANCH="release/${TAG}"
-              git remote set-url origin "https://x-access-token:${RELEASE_PREP_AUTH_TOKEN}@github.com/${GITHUB_REPOSITORY}.git"
-              git fetch origin "refs/heads/${BRANCH}:refs/remotes/origin/${BRANCH}" || true
-              git push --force-with-lease --set-upstream origin "HEAD:${BRANCH}"
+            BRANCH="release/${TAG}-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}"
+            git push --set-upstream origin "HEAD:${BRANCH}"
 
-              PR_TITLE="chore: prepare release ${TAG}"
-              PR_BODY=$(cat <<EOF
+            PR_TITLE="chore: prepare release ${TAG}"
+            PR_BODY=$(cat <<EOF
           ## Summary
           - prepare \`${TAG}\` for publication from protected \`${BASE_BRANCH}\`
           - update package metadata to \`${TARGET_VER}\`
           - move the current \`Unreleased\` notes into \`${TARGET_VER}\`
 
-          The CD workflow will continue only after this release metadata is present on \`${BASE_BRANCH}\`.
+          The CD workflow will continue only after this release metadata is merged into \`${BASE_BRANCH}\` and exact-commit CI succeeds.
           EOF
           )
 
-              PR_NUMBER="$(gh pr list --head "${BRANCH}" --base "${BASE_BRANCH}" --state open --json number --jq '.[0].number' || true)"
-              if [ -n "${PR_NUMBER}" ] && [ "${PR_NUMBER}" != "null" ]; then
-                gh pr edit "${PR_NUMBER}" --title "${PR_TITLE}" --body "${PR_BODY}"
-              else
-                PR_URL="$(gh pr create --base "${BASE_BRANCH}" --head "${BRANCH}" --title "${PR_TITLE}" --body "${PR_BODY}")"
-                PR_NUMBER="$(gh pr view "${PR_URL}" --json number --jq '.number')"
-              fi
+            PR_URL="$(gh pr create --base "${BASE_BRANCH}" --head "${BRANCH}" --title "${PR_TITLE}" --body "${PR_BODY}")"
+            PR_NUMBER="$(gh pr view "${PR_URL}" --json number --jq '.number')"
 
-              if gh pr merge "${PR_NUMBER}" --squash --delete-branch; then
-                echo "Release metadata PR #${PR_NUMBER} merged."
-              else
-                echo "Immediate merge was not available for release metadata PR #${PR_NUMBER}; enabling auto-merge and waiting."
-                gh pr merge "${PR_NUMBER}" --auto --squash --delete-branch || true
+            if gh pr merge "${PR_NUMBER}" --squash --delete-branch; then
+              echo "Release metadata PR #${PR_NUMBER} merged."
+            else
+              echo "Immediate merge was not available for release metadata PR #${PR_NUMBER}; enabling auto-merge and waiting."
+              gh pr merge "${PR_NUMBER}" --auto --squash --delete-branch || true
 
-                DEADLINE=$((SECONDS + MERGE_TIMEOUT_SECONDS))
-                while [ "${SECONDS}" -lt "${DEADLINE}" ]; do
-                  STATE="$(gh pr view "${PR_NUMBER}" --json state --jq '.state')"
-                  if [ "${STATE}" = "MERGED" ]; then
-                    echo "Release metadata PR #${PR_NUMBER} merged."
-                    break
-                  fi
-                  if [ "${STATE}" = "CLOSED" ]; then
-                    echo "Release metadata PR #${PR_NUMBER} closed without merging." >&2
-                    exit 1
-                  fi
-                  sleep 10
-                done
-
+              DEADLINE=$((SECONDS + MERGE_TIMEOUT_SECONDS))
+              while [ "${SECONDS}" -lt "${DEADLINE}" ]; do
                 STATE="$(gh pr view "${PR_NUMBER}" --json state --jq '.state')"
-                if [ "${STATE}" != "MERGED" ]; then
-                  echo "Release metadata PR #${PR_NUMBER} did not merge within ${MERGE_TIMEOUT_SECONDS}s; release will not continue until ${BASE_BRANCH} contains ${TAG}." >&2
+                if [ "${STATE}" = "MERGED" ]; then
+                  echo "Release metadata PR #${PR_NUMBER} merged."
+                  break
+                fi
+                if [ "${STATE}" = "CLOSED" ]; then
+                  echo "Release metadata PR #${PR_NUMBER} closed without merging." >&2
                   exit 1
                 fi
+                sleep 10
+              done
+
+              STATE="$(gh pr view "${PR_NUMBER}" --json state --jq '.state')"
+              if [ "${STATE}" != "MERGED" ]; then
+                echo "Release metadata PR #${PR_NUMBER} did not merge within ${MERGE_TIMEOUT_SECONDS}s; release will not continue until ${BASE_BRANCH} contains ${TAG}." >&2
+                exit 1
               fi
             fi
           fi
@@ -458,13 +454,23 @@ jobs:
             FLAGS="--access public"
           fi
 
-          EFFECTIVE_PREID="${PREID:-}"
-          if [ -z "${EFFECTIVE_PREID}" ]; then
-            EFFECTIVE_PREID=$(TARGET_VER="${TARGET_VER}" node -e '
+          EFFECTIVE_PREID=$(TARGET_VER="${MAIN_VERSION}" node -e '
           const version = process.env.TARGET_VER || "";
-          const match = version.match(/^[0-9]+\.[0-9]+\.[0-9]+-([0-9A-Za-z][0-9A-Za-z.-]*)\.[0-9]+$/);
-          process.stdout.write(match ? match[1] : "");
+          const match = version.match(/^[0-9]+\.[0-9]+\.[0-9]+(?:-([0-9A-Za-z-]+(?:\.[0-9A-Za-z-]+)*))?(?:\+[0-9A-Za-z-]+(?:\.[0-9A-Za-z-]+)*)?$/);
+          if (!match) {
+            console.error(`Cannot derive pre-release identity from invalid version ${version}.`);
+            process.exit(1);
+          }
+          const identifiers = match[1] ? match[1].split(".") : [];
+          if (identifiers.length > 1 && /^[0-9]+$/.test(identifiers.at(-1))) {
+            identifiers.pop();
+          }
+          process.stdout.write(identifiers.join("."));
           ')
+
+          if [ -n "${PREID:-}" ] && [ "${PREID}" != "${EFFECTIVE_PREID}" ]; then
+            echo "Requested pre-release identity ${PREID} does not match the pre-release identity ${EFFECTIVE_PREID:-<stable>} derived from ${MAIN_VERSION}." >&2
+            exit 1
           fi
 
           if [ -n "${EFFECTIVE_PREID}" ]; then
@@ -475,10 +481,7 @@ jobs:
             fi
           fi
 
-          COMMIT_SHA=$(git log -n 1 --format=%H -- "${PACKAGE_JSON}")
-          if [ -z "${COMMIT_SHA}" ]; then
-            COMMIT_SHA=$(git rev-parse HEAD)
-          fi
+          COMMIT_SHA=$(git rev-parse HEAD)
           {
             echo "name=${NAME}"
             echo "version=${TARGET_VER}"
@@ -486,4 +489,5 @@ jobs:
             echo "flags=${FLAGS}"
             echo "published=${PUBLISHED}"
             echo "commit_sha=${COMMIT_SHA}"
+            echo "effective_preid=${EFFECTIVE_PREID}"
           } >> "${GITHUB_OUTPUT}"

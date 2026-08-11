@@ -4,3 +4,4 @@
 - [ADR-0002: Public Package Governance Baseline](./adr-0002-public-package-governance-baseline.md)
 - [ADR-0003: Local and Remote Speech Recognition Fallback](./adr-0003-remote-speech-recognition-fallback.md)
 - [ADR-0004: Focused-Pane and Combat-Safe Voice Routing](./adr-0004-focused-pane-and-combat-safe-voice-routing.md)
+- [ADR-0005: Hosted OIDC Package Publication](./adr-0005-hosted-oidc-package-publication.md)

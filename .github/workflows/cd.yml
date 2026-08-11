@@ -49,12 +49,90 @@ jobs:
           ref: ${{ needs.prepare_release.outputs.commit_sha }}
           fetch-depth: 0
 
+      - name: Enforce exact-main successful CI
+        env:
+          EXPECTED_SHA: ${{ needs.prepare_release.outputs.commit_sha }}
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+
+          if ! printf '%s' "${EXPECTED_SHA}" | grep -Eq '^[0-9a-f]{40}$'; then
+            echo "Release preparation did not return a full commit SHA." >&2
+            exit 1
+          fi
+
+          git fetch origin main --no-tags
+          REMOTE_MAIN="$(git rev-parse refs/remotes/origin/main)"
+          if [ "${REMOTE_MAIN}" != "${EXPECTED_SHA}" ]; then
+            echo "main moved from prepared commit ${EXPECTED_SHA} to ${REMOTE_MAIN}; refusing publication." >&2
+            exit 1
+          fi
+
+          DEADLINE=$((SECONDS + 1800))
+          MATCHES=0
+          while [ "${SECONDS}" -lt "${DEADLINE}" ]; do
+            RUNS="$(
+              gh api -X GET \
+                "repos/${GITHUB_REPOSITORY}/actions/workflows/ci.yml/runs" \
+                -f branch=main \
+                -f event=push \
+                -f head_sha="${EXPECTED_SHA}" \
+                -f status=success \
+                -f per_page=100
+            )"
+            MATCHES="$(
+              jq \
+                --arg sha "${EXPECTED_SHA}" \
+                '[.workflow_runs[] | select(
+                  .head_sha == $sha and
+                  .head_branch == "main" and
+                  .event == "push" and
+                  .status == "completed" and
+                  .conclusion == "success"
+                )] | length' \
+                <<<"${RUNS}"
+            )"
+            if [ "${MATCHES}" -gt 0 ]; then
+              echo "Exact-SHA CI succeeded for ${EXPECTED_SHA}."
+              break
+            fi
+            sleep 15
+          done
+
+          if [ "${MATCHES}" -le 0 ]; then
+            echo "No successful main push CI completed for ${EXPECTED_SHA} within 1800 seconds." >&2
+            exit 1
+          fi
+
       - name: Use Node.js 24
         uses: actions/setup-node@v4
         with:
           node-version-file: ".nvmrc"
           registry-url: "https://registry.npmjs.org"
           cache: npm
+
+      - name: Verify release runtime
+        run: |
+          set -euo pipefail
+
+          ACTUAL_NODE="$(node --version | sed 's/^v//')"
+          if [ "${ACTUAL_NODE%%.*}" != "24" ]; then
+            echo "Expected Node.js 24, found ${ACTUAL_NODE}." >&2
+            exit 1
+          fi
+
+          ACTUAL_NPM="$(npm --version)"
+          node - "${ACTUAL_NPM}" <<'NODE'
+          const actual = process.argv[2].split(".").map(Number);
+          const minimum = "11.5.1".split(".").map(Number);
+          for (let index = 0; index < 3; index += 1) {
+            if (actual[index] > minimum[index]) process.exit(0);
+            if (actual[index] < minimum[index]) process.exit(1);
+          }
+          process.exit(0);
+          NODE
+
+          echo "Using Node.js ${ACTUAL_NODE} and npm ${ACTUAL_NPM}."
 
       - name: Use prepared release metadata
         id: release
@@ -230,17 +308,11 @@ jobs:
       - name: Publish package
         if: steps.release.outputs.should_publish_npm == 'true'
         env:
-          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
           FLAGS: ${{ steps.release.outputs.flags }}
           PACKAGE_NAME: ${{ steps.release.outputs.package_name }}
           PACKAGE_VERSION: ${{ steps.release.outputs.release_version }}
         run: |
           set -euo pipefail
-          if [ -z "${NODE_AUTH_TOKEN:-}" ]; then
-            echo "NPM_TOKEN is required" >&2
-            exit 1
-          fi
-
           if npm view "${PACKAGE_NAME}@${PACKAGE_VERSION}" version --registry https://registry.npmjs.org >/dev/null 2>&1; then
             echo "${PACKAGE_NAME}@${PACKAGE_VERSION} already exists on npm; skipping duplicate publish."
             exit 0

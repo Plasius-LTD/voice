@@ -443,8 +443,10 @@ This project is licensed under the terms of the [Apache 2.0 license](./LICENSE).
 ## Release integrity
 
 CI keeps the administrative contributor registry outside Git and npm package
-artifacts using exact, case-normalised path checks. CI runs on approved
-self-hosted runners. Release preparation and npm publication use GitHub-hosted
-runners with Node.js 24.18.0 LTS. CD remains disabled until the npm trusted
-publisher binding is verified and the legacy token fallback is removed.
+artifacts using exact, case-normalised path checks. Reviewed CI runs on explicit
+GitHub-hosted runners with package-manager caching disabled; fork PR code is
+denied. Publication uses the GitHub-hosted `production` job with Node 24 and
+pinned npm 11.6.2. It is token-free and proceeds only while the prepared SHA
+is the exact `main` head after successful push-triggered CI. Do not dispatch CD
+until the npm trusted-publisher binding is verified.
 <!-- END PLASIUS RELEASE INTEGRITY -->

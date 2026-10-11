@@ -47,9 +47,9 @@
     "prepublishOnly": "npm run build && npm run pack:check"
   },
   "dependencies": {
-    "@plasius/nfr": "^1.1.4",
-    "@plasius/react-state": "^1.2.20",
-    "@plasius/translations": "^1.0.25"
+    "@plasius/nfr": "^1.1.5",
+    "@plasius/react-state": "^1.2.21",
+    "@plasius/translations": "^1.0.26"
   },
   "peerDependencies": {
     "react": "^19"
